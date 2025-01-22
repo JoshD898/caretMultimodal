@@ -11,8 +11,16 @@
 #' @param ... additional arguments to pass to \code{\link[caret]{predict.train}}, if newdata is not NULL
 #' @return a data.table
 #' @keywords internal
-caretPredict <- function(object, newdata = NULL, excluded_class_id = 1L, aggregate_resamples = TRUE, ...) {
-  stopifnot(is.logical(aggregate_resamples), length(aggregate_resamples) == 1L, methods::is(object, "train"))
+.CaretPredict <- function(object,
+                         newdata = NULL,
+                         excluded_class_id = 1L,
+                         aggregate_resamples = TRUE,
+                         ...) {
+
+  #TODO make type checks concistent accross project
+  stopifnot(is.logical(aggregate_resamples),
+            length(aggregate_resamples) == 1L,
+            methods::is(object, "train"))
 
   # Extract the model type
   is_class <- isClassifierAndValidate(object, validate_for_stacking = is.null(newdata))
@@ -26,7 +34,7 @@ caretPredict <- function(object, newdata = NULL, excluded_class_id = 1L, aggrega
     # Otherwise, predict on newdata
   } else {
     if (any(object[["modelInfo"]][["library"]] %in% c("neuralnet", "klaR"))) {
-      newdata <- as.matrix(newdata) # I hate some of these packages
+      newdata <- as.matrix(newdata)
     }
     if (is_class) {
       pred <- stats::predict(object, type = "prob", newdata = newdata, ...)
@@ -65,4 +73,55 @@ caretPredict <- function(object, newdata = NULL, excluded_class_id = 1L, aggrega
   }
 
   pred
+}
+
+
+#' @title Validate a model type
+#' @description Validate the model type from a \code{\link[caret]{train}} object.
+#' For classification, validates that the model can predict probabilities, and,
+#'  if stacked predictions are requested, that classProbs = TRUE.
+#' @param object a \code{\link[caret]{train}} object
+#' @param validate_for_stacking a logical indicating whether to validate the object for stacked predictions
+#' @return a logical. TRUE if classifier, otherwise FALSE.
+#' @keywords internal
+.IsClassifierAndValidate <- function(object, validate_for_stacking = TRUE) {
+  stopifnot(methods::is(object, "train"))
+
+  is_class <- .IsClassifier(object)
+
+  # Validate for predictions
+  if (is_class && !is.function(object$modelInfo$prob)) {
+    stop("No probability function found. Re-fit with a method that supports prob.", call. = FALSE)
+  }
+  # Validate for stacked predictions
+  if (validate_for_stacking) {
+    err <- "Must have savePredictions = 'all', 'final', or TRUE in trainControl to do stacked predictions."
+    if (is.null(object$control$savePredictions)) {
+      stop(err, call. = FALSE)
+    }
+    if (!object$control$savePredictions %in% c("all", "final", TRUE)) {
+      stop(err, call. = FALSE)
+    }
+    if (is_class && !object$control$classProbs) {
+      stop("classProbs = FALSE. Re-fit with classProbs = TRUE in trainControl.", call. = FALSE)
+    }
+  }
+
+  # Return
+  is_class
+}
+
+#' @title Is Classifier
+#' @description Check if a model is a classifier.
+#' @param model A train object from the caret package.
+#' @return A logical indicating whether the model is a classifier.
+#' @keywords internal
+.IsClassifier <- function(model) {
+  stopifnot(methods::is(model, "train") || methods::is(model, "caretStack"))
+  if (methods::is(model, "train")) {
+    out <- model$modelType == "Classification"
+  } else {
+    out <- model$ens_model$modelType == "Classification"
+  }
+  out
 }

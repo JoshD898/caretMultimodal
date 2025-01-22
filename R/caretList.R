@@ -19,7 +19,7 @@ caretList <- function(
     trim = TRUE,
     aggregateResamples = TRUE,
     ...
-    ) {
+) {
 
   # Basic checks
 
@@ -55,8 +55,6 @@ caretList <- function(
   trArgs[["y"]] <- target
   trArgs[["method"]] <- method
 
-  print(trArgs)
-
   # Make model list
 
   modelList <- lapply(
@@ -64,9 +62,9 @@ caretList <- function(
     function(data) .CaretTrain(
       trArgs = trArgs,
       data = data,
-      continueOnFail = False,
-      trim = True,
-      aggregateResamples = True
+      continueOnFail = FALSE,
+      trim = TRUE,
+      aggregateResamples = TRUE
     )
   )
   # TODO test this... what happens if training fails?
@@ -97,25 +95,25 @@ caretList <- function(
 #' memory and speed up the stacking process. It also converts preds to a data.table.
 #' Its an internal function for use with caretList.
 #' @param trArgs A list of arguments to pass to the `train` function.
-#' @param continue_on_fail A logical indicating whether to continue if the `train` function fails.
+#' @param continueOnFail A logical indicating whether to continue if the `train` function fails.
 #'  If `TRUE`, the function will return `NULL` if the `train` function fails.
 #' @param trim A logical indicating whether to trim the output model.
 #' If `TRUE`, the function will remove some elements that are not needed from the output model.
-#' @param aggregate_resamples A logical indicating whether to aggregate stacked predictions Default is TRUE.
+#' @param aggregateResamples A logical indicating whether to aggregate stacked predictions Default is TRUE.
 #' @return The output of the `caret::train` function.
 #' @keywords internal
 .CaretTrain <- function(
     trArgs,
     data,
-    continueOnFail = False,
-    trim = True,
-    aggregateResamples = True
+    continueOnFail = FALSE,
+    trim = TRUE,
+    aggregateResamples = TRUE
 ) {
 
   trArgs[["x"]] <- data
 
   # Fit model
-  if (continue_on_fail) {
+  if (continueOnFail) {
     model <- tryCatch(do.call(caret::train, trArgs), error = function(e) {
       warning(conditionMessage(e), call. = FALSE)
       NULL
@@ -126,7 +124,7 @@ caretList <- function(
 
   # Only save stacked predictions for the best model
   if ("pred" %in% names(model)) {
-    model[["pred"]] <- .ExtractBestPreds(model, aggregate_resamples = aggregate_resamples)
+    model[["pred"]] <- .ExtractBestPreds(model, aggregateResamples = aggregateResamples)
   }
 
   if (trim) {
@@ -160,11 +158,11 @@ caretList <- function(
 #' @title Extract the best predictions from a train object
 #' @description Extract the best predictions from a train object.
 #' @param x a train object
-#' @param aggregate_resamples logical, whether to aggregate resamples by keys. Default is TRUE.
+#' @param aggregateResamples logical, whether to aggregate resamples by keys. Default is TRUE.
 #' @return a data.table::data.table with predictions
 #' @keywords internal
-.ExtractBestPreds <- function(x, aggregate_resamples = TRUE) {
-  stopifnot(is.logical(aggregate_resamples), length(aggregate_resamples) == 1L, methods::is(x, "train"))
+.ExtractBestPreds <- function(x, aggregateResamples = TRUE) {
+  stopifnot(is.logical(aggregateResamples), length(aggregateResamples) == 1L, methods::is(x, "train"))
   if (is.null(x[["pred"]])) {
     stop("No predictions saved during training. Please set savePredictions = 'final' in trControl", call. = FALSE)
   }
@@ -186,8 +184,8 @@ caretList <- function(
   data.table::setkeyv(pred, keys)
 
   # If aggregate_resamples is TRUE, aggregate by keys
-  if (aggregate_resamples) {
-    pred <- pred[, lapply(.SD, aggregate_mean_or_first), by = keys]
+  if (aggregateResamples) {
+    pred <- pred[, lapply(.SD, .AggregateMeanOrFirst), by = keys]
   }
 
   # Order results consistently
@@ -195,6 +193,19 @@ caretList <- function(
 
   # Return
   pred
+}
+
+#' @title Aggregate mean or first
+#' @description For numeric data take the mean. For character data take the first value.
+#' @param x a train object
+#' @return a data.table::data.table with predictions
+#' @keywords internal
+.AggregateMeanOrFirst <- function(x) {
+  if (is.numeric(x)) {
+    mean(x)
+  } else {
+    x[[1L]]
+  }
 }
 
 
