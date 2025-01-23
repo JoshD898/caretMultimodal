@@ -84,6 +84,64 @@ caret_list <- function(
   model_list
 }
 
+
+# caret_list methods ------------------------------------------------------------------------------------------
+
+#' @title Create a matrix of predictions for each model in a caret_list
+#'
+#' @param
+#' @param new_data_list A list of datasets to predict on, with each dataset matching the corresponding model in `caret_list`
+#'
+#'
+#'
+predict.caret_list <- function(
+    caret_list,
+    new_data_list = NULL,
+    verbose = FALSE,
+    excluded_class_id = 1L,
+    aggregate_resamples = TRUE,
+    ...) {
+  stopifnot(methods::is(caret_list, "caret_list"))
+
+  apply_fun <- if (verbose) pbapply::pblapply else lapply
+
+  if (!is.null(new_data_list)) {
+    if (length(new_data_list) != length(caret_list)) {
+      stop("The length of new_data_list must be the same length as caret_list", .call = FALSE)
+    }
+
+    row_counts <- vapply(new_data_list, nrow, integer(1L))
+
+    if (!all(row_counts == row_counts[1])) {
+      stop("All matrices in new_data_list must have the same number of rows", call. = FALSE)
+    }
+
+    new_data_list <- lapply(new_data_list, data.table::as.data.table)
+  }
+
+    prediction_list <- apply_fun(seq_along(caret_list), function(i) {
+      model <- caret_list[[i]]
+      new_data <- if (!is.null(new_data_list)) new_data_list[[i]] else NULL
+
+      .caret_predict(
+        model = model,
+        new_data = new_data,
+        excluded_class_id = excluded_class_id,
+        aggregate_resamples = aggregate_resamples,
+        ...
+      )
+    })
+
+  names(prediction_list) <- names(caret_list)
+
+  prediction_matrix <- data.table::as.data.table(prediction_list)
+
+  prediction_matrix
+}
+
+
+# Helper functions -----------------------------------------------------------------------------------------
+
 #' @title Wrapper to train caret models
 #' @description This function is a wrapper around the `caret::train`.
 #'    It allows for the option to continue on fail, and to trim the output model.
@@ -151,7 +209,7 @@ caret_list <- function(
 #' @return A data.table::data.table with predictions
 #' @noRd
 .extract_best_preds <- function(model, aggregate_resamples = TRUE) {
-  stopifnot(is.logical(aggregate_resamples), length(aggregate_resamples) == 1L, methods::is(x, "train"))
+  stopifnot(is.logical(aggregate_resamples), length(aggregate_resamples) == 1L, methods::is(model, "train"))
 
   if (is.null(model[["pred"]])) {
     stop("No predictions saved during training. Please set savePredictions = 'final' in trControl", call. = FALSE)
