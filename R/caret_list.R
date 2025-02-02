@@ -27,28 +27,20 @@ caret_list <- function(
     trim = TRUE,
     aggregate_resamples = TRUE,
     ...) {
-  if (!is.vector(target)) {
-    stop("The target must be a vector.")
-  }
+
+  stopifnot(is.vector(target))
 
   for (i in seq_along(data_list)) {
     if (nrow(data_list[[i]]) != length(target)) {
-      stop(
-        "The number of rows of data_list[[", i, "]] does not match the length of the target vector."
-      )
+      stop("The number of rows of data_list[[", i, "]] does not match the length of the target vector.")
     }
   }
 
   .check_method(method)
 
+  trControl <- if (is.null(trControl)) .default_control(target) else trControl
 
-  if (is.null(trControl)) {
-    trControl <- .default_control(target)
-  }
-
-  if (is.null(metric)) {
-    metric <- .default_metric(target)
-  }
+  metric <- if (is.null(metric)) .default_metric(target) else metric
 
   train_args <- list(...)
   train_args[["trControl"]] <- trControl
@@ -85,15 +77,23 @@ caret_list <- function(
 }
 
 
-# caret_list methods ------------------------------------------------------------------------------------------
+# Methods ------------------------------------------------------------------------------------------
+
+# The following functions are required to make the methods work properly. Not sure if this is best practice, may change it change it.
+
+# TODO see if ... can be removed from these methods
+
+
+
 
 #' @title Create a matrix of predictions for each model in a caret_list
 #'
-#' @param
 #' @param new_data_list A list of datasets to predict on, with each dataset matching the corresponding model in `caret_list`
 #'
 #'
 #'
+#'
+#' @export
 predict.caret_list <- function(
     caret_list,
     new_data_list = NULL,
@@ -101,7 +101,7 @@ predict.caret_list <- function(
     excluded_class_id = 1L,
     aggregate_resamples = TRUE,
     ...) {
-  stopifnot(methods::is(caret_list, "caret_list"))
+  stopifnot(inherits(caret_list, "caret_list"))
 
   apply_fun <- if (verbose) pbapply::pblapply else lapply
 
@@ -140,13 +140,84 @@ predict.caret_list <- function(
 }
 
 
+# TODO change this documentation so it displays properly
+#' @title Extract accuracy metrics from a `caret_list` object
+#' @description Extract the cross-validated accuracy metrics from each model in a `caret_list`.
+#' @param x a `caret_list` object
+#' @param metric a character string representing the metric to extract from each model.
+#' If NULL or if the provided metric is not found, default model metrics will be extracted
+#' @return A data.table with metrics from each model.
+#' @export
+extract_metric <- function(x, ...) UseMethod("extract_metric") # This defines a new S3 method. Don't have to do this for the other methods because they already exist.
+
+extract_metric.caret_list <- function (caret_list, metric = NULL) {
+  metrics <- lapply(names(caret_list), function(model_name) {
+    df <- .extract_train_metric(caret_list[[model_name]], metric = metric)
+    df[, model := model_name]
+    return(df)
+  })
+  metrics <- data.table::rbindlist(metrics, use.names = TRUE, fill = TRUE)
+  metrics <- metrics[, c("model", setdiff(names(metrics), "model")), with = FALSE]
+  metrics
+}
+
+#' @title Summarize a caret_list
+#' @description This function summarizes the performance of each model in a caret_list object.
+#' @param caret_list a caret_list object
+#' @param metric The metric to show. If NULL will use the metric used to train each model
+#' @return A data.table with metrics from each model.
+#' @method summary caret_list
+#' @export
+summary.caret_list <- function(caret_list, metric = NULL) {
+  out <- list(
+    models = toString(names(caret_list)),
+    metrics = extract_metric(caret_list, metric = metric)
+  )
+  class(out) <- "summary.caret_list"
+
+  out
+}
+
+#' @export
+print.summary.caret_list <- function(summary) {
+  cat("The following models were trained:", summary[["models"]], "\n")
+  cat("\nModel metrics:\n")
+  print(summary[["metrics"]])
+}
+
+#' @title Plot a caret_list object
+#' @description This function plots the performance of each model in a caret_list object.
+#' @param x a caret_list object
+#' @param metric which metric to plot
+#' @return A ggplot2 object
+#' @export
+plot.caret_list <- function (caret_list, metric = NULL) {
+  dat <- extract_metric(caret_list, metric = metric)
+  plt <- ggplot2::ggplot(
+    dat, ggplot2::aes(
+      x = .data[["model"]],
+      y = .data[["value"]],
+      ymin = .data[["value"]] - .data[["sd"]],
+      ymax = .data[["value"]] + .data[["sd"]],
+      color = .data[["metric"]]
+    )
+  ) +
+    ggplot2::geom_pointrange() +
+    ggplot2::theme_bw() +
+    ggplot2::labs(x = "Model", y = "Metric Value")
+
+  plt
+}
+
+
+
 # Helper functions -----------------------------------------------------------------------------------------
 
 #' @title Wrapper to train caret models
-#' @description This function is a wrapper around the `caret::train`.
+#' @description This function is a wrapper around the `caret::train` function.
 #'    It allows for the option to continue on fail, and to trim the output model.
 #'    Trimming the model removes components that are not needed for stacking, to save
-#'    memory and speed up the stacking process. It also converts predictionss to a data.table.
+#'    memory and speed up the stacking process. It also converts predictions to a data.table.
 #' @param train_args A named list of arguments to pass to the `caret::train` function.
 #' @param data A data set to use for model training.
 #' @param continue_on_fail A logical indicating whether to continue if the `caret::train` function fails.
@@ -342,4 +413,32 @@ predict.caret_list <- function(
     summaryFunction = ifelse(is_class && is_binary, caret::twoClassSummary, caret::defaultSummary),
     returnData = FALSE
   )
+}
+
+#' @title Extract accuracy metrics from a `caret::train` model
+#' @description Extract the cross-validated accuracy metrics and their SDs from caret.
+#' @param x a `caret::train` object
+#' @param metric a character string representing the metric to extract. If NULL, uses the metric that was used to train the model.
+#' @return A numeric representing the metric desired metric.
+#' @noRd
+.extract_train_metric <- function(x, metric = NULL) {
+  if (is.null(metric) || !metric %in% names(x$results)) {
+    metric <- x$metric
+  }
+
+  results <- data.table::data.table(x$results, key = names(x$bestTune))
+  best_tune <- data.table::data.table(x$bestTune, key = names(x$bestTune))
+
+  best_results <- results[best_tune, ]
+  value <- best_results[[metric]]
+  stdev <- best_results[[paste0(metric, "SD")]]
+  if (is.null(stdev)) stdev <- NA_real_
+
+  out <- data.table::data.table(
+    method = x$method,
+    metric = metric,
+    value = value,
+    sd = stdev
+  )
+  out
 }
