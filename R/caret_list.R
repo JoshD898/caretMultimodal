@@ -1,5 +1,5 @@
-#' @title Create a list of `caret::train` objects
-#' @description This function builds a list of `caret::train` objects, where each model corresponds to a data set in `data_list`.
+#' @title Create a `caret_list` object
+#' @description Build a list of `caret::train` objects, where each model corresponds to a data set in `data_list`.
 #'   The resulting list is structured for use in ensembling workflows. Users can specify the training method, control parameters,
 #'   and metrics, and the function supports error handling and model trimming for efficiency.
 #' @param target Target parameter vector, either numeric for regression or a factor/character for classification.
@@ -14,8 +14,7 @@
 #' @return A `caret_list` object, which is a list of `caret::train` model corresponding to `data_list`.
 #'    If `continue_on_fail` is `TRUE`, the list may have fewer elements that `data_list`.
 #' @examples
-#' # TODO example code
-#'
+#' TODO add examples, first need to decide on suitable data sets
 #' @export
 caret_list <- function(
     target,
@@ -79,12 +78,7 @@ caret_list <- function(
 
 # Methods ------------------------------------------------------------------------------------------
 
-# The following functions are required to make the methods work properly. Not sure if this is best practice, may change it change it.
-
 # TODO see if ... can be removed from these methods
-
-
-
 
 #' @title Create a matrix of predictions for each model in a caret_list
 #'

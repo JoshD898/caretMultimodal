@@ -1,11 +1,16 @@
-testthat::test_that(".MethodCheck validates a supported model name", {
-  expect_null(.MethodCheck("gbm"))
+# TODO load data here
+# Setup ------------------------------------------------------------------------
+# Constructor tests ------------------------------------------------------------
+
+testthat::test_that("caret_list input validation", {
+
+
+
+
+
+
 })
 
-test_that(".MethodCheck throws error for unsuported model name", {
-  expect_error(.MethodCheck("THIS_IS_NOT_A_VALID_MODEL"))
-})
+# Method tests -----------------------------------------------------------------
 
-test_that(".MethodCheck validates a supported model name", {
-  expect_null(.MethodCheck("gbm"))
-})
+# Helper function tests --------------------------------------------------------
