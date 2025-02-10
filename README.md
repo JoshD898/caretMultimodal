@@ -5,7 +5,8 @@ CaretMultimodal is a wrapper around the [caret](https://github.com/topepo/caret)
 multi-dataset training and ensembling. It is heavily inspired by Zach Mayer's 
 [caretEnsemble](https://github.com/zachmayer/caretEnsemble) package.
 
-**NOTE** This is still a work in progress. `caret_list` is  functional, and I am currently working on `caret_stack`. 
+**NOTE** This is still a work in progress. `caret_list` is  functional, and I am currently working on `caret_stack`. There's still lots of work I need to do, including cleaning up documentation and implementing unit tests.
+
 ## Example Usage
 
 For the following examples, we will [these publicly available data sets](https://amritsingh.shinyapps.io/omicsBioAnalytics/) on heart failure. 
