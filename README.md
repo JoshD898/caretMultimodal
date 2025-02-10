@@ -1,32 +1,19 @@
 
 # caretMultimodal
 
-CaretMultimodal is a wrapper around the [caret] package that allows for simplified 
+CaretMultimodal is a wrapper around the [caret](https://github.com/topepo/caret) package that allows for simplified 
 multi-dataset training and ensembling. It is heavily inspired by Zach Mayer's 
 [caretEnsemble](https://github.com/zachmayer/caretEnsemble) package.
 
-To Do list:
 
-
-## Project Structure
-
-
-
-
-
-
-The "Helpers.R" file contains helper functoins that are used in 2 or more other files.
-
-
-## caret_list example
+## Example Usage
 
 For the following examples, we will [these publicly available data sets](https://amritsingh.shinyapps.io/omicsBioAnalytics/) on heart failure. 
-The data sets are described [here](https://pubmed.ncbi.nlm.nih.gov/30935638/)
-
-caret_list allows for users to train multiple models by only calling one function.
+The data sets are described [here](https://pubmed.ncbi.nlm.nih.gov/30935638/).
 
 
-In this example, we will train models on the **cells, holter, and protein** data sets to predict patient **hospitalization** using the **generalized linear model (GLM)** method.  
+
+Lets train models on the **cells, holter, and protein** data sets to predict patient **hospitalization** using the **generalized linear model (GLM)** method.  
 
 ### Creating a `caret_list` object
 ```r
@@ -55,8 +42,10 @@ predict(models)
 #>              ...          ...            ...
 
 plot(models)
-
 ```
+![image](https://github.com/user-attachments/assets/746943eb-e12f-4df3-a67e-74e7ca94235b)
 
+### Using `caret_stack` to stack models
 
+TODO
 
