@@ -5,7 +5,7 @@ CaretMultimodal is a wrapper around the [caret](https://github.com/topepo/caret)
 multi-dataset training and ensembling. It is heavily inspired by Zach Mayer's 
 [caretEnsemble](https://github.com/zachmayer/caretEnsemble) package.
 
-
+**NOTE** This is still a work in progress. `caret_list` is  functional, and I am currently working on `caret_stack`. 
 ## Example Usage
 
 For the following examples, we will [these publicly available data sets](https://amritsingh.shinyapps.io/omicsBioAnalytics/) on heart failure. 
@@ -48,4 +48,19 @@ plot(models)
 ### Using `caret_stack` to stack models
 
 TODO
+
+## Project Structure
+
+This project generally follows the [Tidyverse style guide](https://style.tidyverse.org/).  
+
+### Naming Conventions  
+- Internal (non-exported) functions are prefixed with `.` to hide them from the package namespace.  
+
+### File Organization  
+Each object’s definition and its associated methods are contained within a single file.  
+
+- **`caret_list.R`** – Defines the `caret_list` object and its methods.  
+- **`caret_stack.R`** – Defines the `caret_stack` object and its methods.  
+- **`helpers.R`** – Contains internal helper functions shared across multiple objects.
+
 
