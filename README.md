@@ -35,63 +35,28 @@ models <- caret_list(
     data_list = list(cells = cells, holter = holter, proteins = proteins), 
     method = "glm"
 )
-```
 
-### `caret_list` methods
+print(summary(models))
+#> The following models were trained: cells_model, holter_model, proteins_model 
+#>
+#> Model metrics:
+#>             model method metric     value         sd
+#>            <char> <char> <char>     <num>      <num>
+#> 1:    cells_model    glm    ROC 0.5962963 0.08114408
+#> 2:   holter_model    glm    ROC 0.5037037 0.15843889
+#> 3: proteins_model    glm    ROC 0.5944444 0.13833222
 
-**NOTE** extract metric, summary and print summary are very very similar. Copied them over from caretEnsemble, but could cull them down.
-
-##### predict()
-
-Makes a matrix of predictions for each model in a caret list.
-
-```r
 predict(models)
-```
-Produces:
+#>      cells_model holter_model proteins_model
+#>            <num>        <num>          <num>
+#>  1: 3.082239e-02 1.512935e-06   2.220446e-16
+#>  2: 9.971526e-01 2.220446e-16   1.000000e+00
+#>  3: 8.656950e-01 2.220446e-16   1.000000e+00
+#>              ...          ...            ...
 
- cells_model holter_model proteins_model
- 1: 3.082239e-02 1.512935e-06   2.220446e-16
- 2: 9.971526e-01 2.220446e-16   1.000000e+00
- 3: 8.656950e-01 2.220446e-16   1.000000e+00
- 4: 4.392770e-02 9.993809e-01   1.000000e+00
- 5: 7.850696e-02 2.220446e-16   1.000000e+00
- 6: 9.969068e-01 1.000000e+00   1.000000e+00
-
-##### extract_metric()
-
-```r
-extract_metric(models)
-```
-Produces:
-
-            model method metric     value         sd
-1:    cells_model    glm    ROC 0.5962963 0.08114408
-2:   holter_model    glm    ROC 0.5037037 0.15843889
-3: proteins_model    glm    ROC 0.5944444 0.13833222
-
-
-##### summary() / print(summary())
-
-```r
-summary <- summary(models)
-print(summary)
-```
-Produces:
-The following models were trained: cells_model, holter_model, proteins_model 
-
-Model metrics:
-            model method metric     value         sd
-           <char> <char> <char>     <num>      <num>
-1:    cells_model    glm    ROC 0.5962963 0.08114408
-2:   holter_model    glm    ROC 0.5037037 0.15843889
-3: proteins_model    glm    ROC 0.5944444 0.13833222
-
-##### plot()
-
-```r
 plot(models)
+
 ```
-Produces:
+
 
 
