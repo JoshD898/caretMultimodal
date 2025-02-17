@@ -133,6 +133,7 @@ predict.caret_list <- function(
   prediction_matrix
 }
 
+extract_metric <- function(x, ...) UseMethod("extract_metric")
 
 # TODO change this documentation so it displays properly
 #' @title Extract accuracy metrics from a `caret_list` object
@@ -142,8 +143,6 @@ predict.caret_list <- function(
 #' If NULL or if the provided metric is not found, default model metrics will be extracted
 #' @return A data.table with metrics from each model.
 #' @export
-extract_metric <- function(x, ...) UseMethod("extract_metric") # This defines a new S3 method. Don't have to do this for the other methods because they already exist.
-
 extract_metric.caret_list <- function (caret_list, metric = NULL) {
   metrics <- lapply(names(caret_list), function(model_name) {
     df <- .extract_train_metric(caret_list[[model_name]], metric = metric)
@@ -247,7 +246,6 @@ plot.caret_list <- function (caret_list, metric = NULL) {
       model[["finalModel"]] <- model[["modelInfo"]][["trim"]](model[["finalModel"]])
     }
 
-    # note that caret::trim will remove stuff we DO need, such as results, preds, besttune, etc.
     removals <- c("call", "dots", "trainingData", "resampledCM")
     for (i in removals) {
       if (i %in% names(model)) {
@@ -267,33 +265,35 @@ plot.caret_list <- function (caret_list, metric = NULL) {
 }
 
 
-#' @title Extract the best predictions from a train object
-#' @description Extract the best predictions from a train object.
+#' @title Extract the best predictions from a `caret::train` object
+#' @description Extract the best predictions from a `caret::train` object.
 #' @param model A `caret::train` object
 #' @param aggregate_resamples Logical, whether to aggregate resamples by keys. Default is TRUE.
-#' @return A data.table::data.table with predictions
+#' @return A `data.table::data.table` with predictions
 #' @noRd
 .extract_best_preds <- function(model, aggregate_resamples = TRUE) {
-  stopifnot(is.logical(aggregate_resamples), length(aggregate_resamples) == 1L, methods::is(model, "train"))
+  stopifnot(is.logical(aggregate_resamples), length(aggregate_resamples) == 1L, inherits(model, "train"))
 
   if (is.null(model[["pred"]])) {
     stop("No predictions saved during training. Please set savePredictions = 'final' in trControl", call. = FALSE)
   }
 
-  stopifnot(methods::is(model$pred, "data.frame"))
+  stopifnot(inherits(model$pred, "data.frame"))
 
   keys <- names(model$bestTune)
   best_tune <- data.table::data.table(model$bestTune, key = keys)
 
   pred <- data.table::data.table(model$pred, key = keys)
 
-  pred <- pred[best_tune, ]
+  if (!is.null(best_tune) && nrow(best) > 0) {
+    pred <- pred[best_tune, ]
+  }
 
   keys <- "rowIndex"
   data.table::setkeyv(pred, keys)
 
   if (aggregate_resamples) {
-    pred <- pred[, lapply(.SD, .aggregate_mean_or_first), by = keys]
+    pred <- pred[, lapply(.SD, .aggregate_vector), by = keys]
   }
 
   data.table::setorderv(pred, keys)
@@ -301,12 +301,12 @@ plot.caret_list <- function (caret_list, metric = NULL) {
   pred
 }
 
-#' @title Aggregate mean or first
-#' @description For numeric data take the mean. For character data take the first value.
+#' @title Aggregate vector
+#' @description Aggregate a vector depending on its type. For numeric data return the mean. For factor data return the first value.
 #' @param x A vector to be aggregated.
 #' @return The mean of numeric data or the first value of non-numeric data.
 #' @noRd
-.aggregate_mean_or_first <- function(x) {
+.aggregate_vector <- function(x) {
   if (is.numeric(x)) {
     mean(x)
   } else {
@@ -325,7 +325,7 @@ plot.caret_list <- function (caret_list, metric = NULL) {
   supported_models <- unique(caret::modelLookup()[["model"]])
 
   if (is.list(method)) {
-    .check_custom_model(method)
+    .check_custom_method(method)
   } else if (!(method %in% supported_models)) {
     stop(
       "Method \"", method, "\" is invalid. Method must either be a character name ",
@@ -336,13 +336,13 @@ plot.caret_list <- function (caret_list, metric = NULL) {
   }
 }
 
-#' @title Check that a custom caret model has required elements
+#' @title Check that a custom caret method has required elements
 #' @description Checks for mandatory elements documented here:
 #' https://topepo.github.io/caret/using-your-own-model-in-train.html
-#' @param model The model to be validated
+#' @param method The method to be validated
 #' @return NULL
 #' @noRd
-.check_custom_model <- function(model) {
+.check_custom_method <- function(method) {
   required_elements <- list(
     library = "character",
     type = "character",
@@ -355,10 +355,12 @@ plot.caret_list <- function (caret_list, metric = NULL) {
   )
 
   for (element in names(required_elements)) {
-    if (!(elem %in% names(model))) {
-      stop(
-        "Custom model must be defined with a \"", elem, "\" component"
-      )
+    if (!(element %in% names(method))) {
+      stop(sprintf('Custom method must be defined with a "%s" component.', element))
+    }
+
+    if (!inherits(method[[element]], required_elements[[element]])) {
+      stop(sprintf('Component "%s" of the custom method must be of type %s.', element, required_elements[[element]]))
     }
   }
 }
@@ -410,10 +412,10 @@ plot.caret_list <- function (caret_list, metric = NULL) {
 }
 
 #' @title Extract accuracy metrics from a `caret::train` model
-#' @description Extract the cross-validated accuracy metrics and their SDs from caret.
+#' @description Extract the cross-validated accuracy metrics and their standard deviations.
 #' @param x a `caret::train` object
 #' @param metric a character string representing the metric to extract. If NULL, uses the metric that was used to train the model.
-#' @return A numeric representing the metric desired metric.
+#' @return A `data.table::data.table` with the name, value and standard deviation of the metric
 #' @noRd
 .extract_train_metric <- function(x, metric = NULL) {
   if (is.null(metric) || !metric %in% names(x$results)) {
