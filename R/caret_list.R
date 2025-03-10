@@ -7,14 +7,12 @@
 #' @param method The method to train the models with. Can be a custom method or one found in `caret::modelLookup()`.
 #' @param trControl Control for use with the `caret::train` function. A default control will be constructed depending on the target type.
 #' @param metric Metric for use with `caret::train` function. A default metric will be constructed depending on the target type.
-#' @param continue_on_fail Logical, whether to skip over a data set if the model fails to train.
+#' @param continue_on_fail Logical, whether to skip over a data set if the model fails to train. Default is `FALSE`.
 #' @param trim Logical, whether the train models be trimmed to save memory and speed up stacking.
 #' @param aggregate_resamples Logical, whether to aggregate stacked predictions.
 #' @param ... Any additional arguments to pass to the `caret::train` function
 #' @return A `caret_list` object, which is a list of `caret::train` model corresponding to `data_list`.
 #'    If `continue_on_fail` is `TRUE`, the list may have fewer elements that `data_list`.
-#' @examples
-#' TODO add examples, first need to decide on suitable data sets
 #' @export
 caret_list <- function(
     target,
@@ -59,10 +57,7 @@ caret_list <- function(
       )
     }
   )
-  # TODO test this... what happens if training fails?
-  if (length(model_list) != length(data_list)) {
-    stop("caret::train failed for one or more models. Please inspect your data.", call. = FALSE)
-  }
+
 
   if (is.null(names(data_list))) {
     names(model_list) <- paste0("data_list[[", seq_along(data_list), "]]_model")
@@ -78,15 +73,12 @@ caret_list <- function(
 
 # Methods ------------------------------------------------------------------------------------------
 
-# TODO see if ... can be removed from these methods
-
 #' @title Create a matrix of predictions for each model in a caret_list
-#'
+#' @param caret_list A `caret_list` object
 #' @param new_data_list A list of datasets to predict on, with each dataset matching the corresponding model in `caret_list`
-#'
-#'
-#'
-#'
+#' @param verbose A boolean that controls the verbosity of error messages
+#' @param excluded_class_id An integer indicating the class to exclude from predictions. If 0L, no class is excluded. Default is 1L.
+#' @param aggregate_resamples A boolean that controls whether to aggregate resamples by keys. Default is `TRUE`.
 #' @export
 predict.caret_list <- function(
     caret_list,
@@ -95,7 +87,6 @@ predict.caret_list <- function(
     excluded_class_id = 1L,
     aggregate_resamples = TRUE,
     ...) {
-  stopifnot(inherits(caret_list, "caret_list"))
 
   apply_fun <- if (verbose) pbapply::pblapply else lapply
 
@@ -135,7 +126,6 @@ predict.caret_list <- function(
 
 extract_metric <- function(x, ...) UseMethod("extract_metric")
 
-# TODO change this documentation so it displays properly
 #' @title Extract accuracy metrics from a `caret_list` object
 #' @description Extract the cross-validated accuracy metrics from each model in a `caret_list`.
 #' @param x a `caret_list` object
@@ -214,7 +204,7 @@ plot.caret_list <- function (caret_list, metric = NULL) {
 #' @param train_args A named list of arguments to pass to the `caret::train` function.
 #' @param data A data set to use for model training.
 #' @param continue_on_fail A logical indicating whether to continue if the `caret::train` function fails.
-#'   If `TRUE`, the function will return `NULL` if the function fails.
+#'   If `TRUE`, the function will return `NULL` if the function fails. Default is `FALSE`.
 #' @param trim A logical indicating whether to trim the output model.
 #'   If `TRUE`, the function will remove some elements that are not needed from the output model.
 #' @param aggregate_resamples A logical indicating whether to aggregate stacked predictions Default is `TRUE`.
@@ -226,6 +216,7 @@ plot.caret_list <- function (caret_list, metric = NULL) {
     continue_on_fail = FALSE,
     trim = TRUE,
     aggregate_resamples = TRUE) {
+
   train_args[["x"]] <- data
 
   if (continue_on_fail) {
@@ -280,13 +271,15 @@ plot.caret_list <- function (caret_list, metric = NULL) {
 
   stopifnot(inherits(model$pred, "data.frame"))
 
-  keys <- names(model$bestTune)
-  best_tune <- data.table::data.table(model$bestTune, key = keys)
+  if (nrow(model$bestTune) > 0) {
+    keys <- names(model$bestTune)
+    best_tune <- data.table::data.table(model$bestTune, key = keys)
 
-  pred <- data.table::data.table(model$pred, key = keys)
+    pred <- data.table::data.table(model$pred, key = keys)
 
-  if (!is.null(best_tune) && nrow(best) > 0) {
     pred <- pred[best_tune, ]
+  } else {
+    pred <- data.table::data.table(model$pred)
   }
 
   keys <- "rowIndex"
