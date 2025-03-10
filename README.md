@@ -5,16 +5,24 @@ CaretMultimodal is a wrapper around the [caret](https://github.com/topepo/caret)
 multi-dataset training and ensembling. It is heavily inspired by Zach Mayer's 
 [caretEnsemble](https://github.com/zachmayer/caretEnsemble) package.
 
-**NOTE** This is still a work in progress. `caret_list` is  functional, and I am currently working on `caret_stack`. There's still lots of work I need to do, including cleaning up documentation and implementing unit tests.
+## TEMP NOTES
+
+* caret_stack seems to produce worse metrics than the base models more often than not. Not sure if this is because I am coding something wrong, or if this is just a consequence of the training methods I am using
+* I am working on an autoplot for caret_stack, similar to the one from caretEnsemble
+* I am still working on unit testing
+* Are there any important functionalities that are missing? For example, a wrapper around caret_list and caret_stack so everything can be done from 1 function?
+
+* Next steps:
+1) Implement autopot method for caret_stack
+2) Finish unit tests, get 100% code coverage
+3) Upload to CRAN?
 
 ## Example Usage
 
 For the following examples, we will [these publicly available data sets](https://amritsingh.shinyapps.io/omicsBioAnalytics/) on heart failure. 
 The data sets are described [here](https://pubmed.ncbi.nlm.nih.gov/30935638/).
 
-
-
-Lets train models on the **cells, holter, and protein** data sets to predict patient **hospitalization** using the **generalized linear model (GLM)** method.  
+Let's train models on the **cells, holter, and protein** data sets to predict patient **hospitalization** using the **generalized linear model (GLM)** method.  
 
 ### Creating a `caret_list` object
 ```r
@@ -48,7 +56,45 @@ plot(models)
 
 ### Using `caret_stack` to stack models
 
-TODO
+The `caret_stack` function trains a new `caret::train` object on the predictions from models in a `caret_list`. Let's use the **Random Forest** method to ensemble the models we just trained.
+```r
+stack <- caret_stack(
+    caret_list = models,
+    method = "rf"
+)
+
+print(summary(stack))
+#> The following models were ensembled: cells_model, holter_model, proteins_model  
+#> 
+#> Relative importance:
+#>                 Overall
+#> cells_model    21.19387
+#> holter_model   20.79166
+#> proteins_model 58.01447
+#> 
+#> Model accuracy:
+#>             model method metric     value        sd
+#>            <char> <char> <char>     <num>     <num>
+#> 1:       ensemble     rf    ROC 0.6314815 0.2226462
+#> 2:    cells_model    glm    ROC 0.6203704 0.1178511
+#> 3:   holter_model    glm    ROC 0.4925926 0.2711714
+#> 4: proteins_model    glm    ROC 0.5314815 0.1758772
+
+predict(
+    stack,
+    new_data_list = NULL  # When this is null, the prediction is based on the training data for each model. 
+)
+#> Yes
+#>     <num>
+#>  1: 0.076
+#>  2: 0.186
+#>  3: 0.472
+#> ...
+
+plot(stack)
+```
+![image](https://github.com/user-attachments/assets/6e19364d-7121-446c-9769-ffefa16c497f)
+
 
 ## Project Structure
 
