@@ -183,3 +183,179 @@
 
   out
 }
+
+#' @title Construct a default metric for use with caret_list
+#' @description Determines the default metric based on the type of target vector.
+#' For classification, defaults to "ROC" if the target is binary and "Accuracy" otherwise.
+#' For regression, defaults to "RMSE".
+#' @param target Target parameter vector, either numeric for regression or a factor/character for classification.
+#' @return A character string indicating the default metric
+#' @noRd
+.default_metric <- function(target) {
+  is_class <- is.factor(target) || is.character(target)
+  is_binary <- length(unique(target)) == 2L
+
+  if (is_class) {
+    if (is_binary) {
+      "ROC"
+    } else {
+      "Accuracy"
+    }
+  } else {
+    "RMSE"
+  }
+}
+
+#' @title Construct a default train control for use with caret_list
+#' @description Unlike `caret::trainControl()`, this function defaults to 5 fold CV.
+#' CV is good for stacking, as every observation is in the test set exactly once.
+#' 5 is used instead of 10 to save compute time, as caret_list is for fitting many
+#' models. Explicit fold indexes are constructed, and predictions are saved for stacking.
+#' For classification models, class probabilities are returned.
+#' @param target Target parameter vector, either numeric for regression or a factor/character for classification.
+#' @return A `caret::trainControl` object
+#' @noRd
+.default_control <- function(target) {
+  is_class <- is.factor(target) || is.character(target)
+  is_binary <- length(unique(target)) == 2L
+
+  caret::trainControl(
+    method = "cv",
+    number = 5L,
+    index = caret::createFolds(target, k = 5L, list = TRUE, returnTrain = TRUE),
+    savePredictions = "final",
+    classProbs = is_class,
+    summaryFunction = ifelse(is_class && is_binary, caret::twoClassSummary, caret::defaultSummary),
+    returnData = FALSE
+  )
+}
+
+#' @title Extract accuracy metrics from a `caret::train` model
+#' @description Extract the cross-validated accuracy metrics and their standard deviations.
+#' @param x a `caret::train` object
+#' @param metric a character string representing the metric to extract. If NULL, uses the metric that was used to train the model.
+#' @return A `data.table::data.table` with the name, value and standard deviation of the metric
+#' @noRd
+.extract_train_metric <- function(x, metric = NULL) {
+  if (is.null(metric) || !metric %in% names(x$results)) {
+    metric <- x$metric
+  }
+
+  results <- data.table::data.table(x$results, key = names(x$bestTune))
+  best_tune <- data.table::data.table(x$bestTune, key = names(x$bestTune))
+
+  best_results <- results[best_tune, ]
+  value <- best_results[[metric]]
+  stdev <- best_results[[paste0(metric, "SD")]]
+  if (is.null(stdev)) stdev <- NA_real_
+
+  out <- data.table::data.table(
+    method = x$method,
+    metric = metric,
+    value = value,
+    sd = stdev
+  )
+  out
+}
+
+#' @title Check that the method supplied by the user is a valid caret method
+#' @description Uses `caret::modelLookup()` to ensure the method supplied by the user
+#' is a model caret can fit
+#' @param method A user-supplied caret method or modelInfo list
+#' @return NULL
+#' @noRd
+.check_method <- function(method) {
+  supported_models <- unique(caret::modelLookup()[["model"]])
+
+  if (is.list(method)) {
+    .check_custom_method(method)
+  } else if (!(method %in% supported_models)) {
+    stop(
+      "Method \"", method, "\" is invalid. Method must either be a character name ",
+      "supported by caret (e.g., \"gbm\") or a modelInfo list ",
+      "(e.g., caret::getModelInfo(\"gbm\", regex = FALSE))",
+      call. = FALSE
+    )
+  }
+}
+
+#' @title Check that a custom caret method has required elements
+#' @description Checks for mandatory elements documented here:
+#' https://topepo.github.io/caret/using-your-own-model-in-train.html
+#' @param method The method to be validated
+#' @return NULL
+#' @noRd
+.check_custom_method <- function(method) {
+  required_elements <- list(
+    library = "character",
+    type = "character",
+    parameters = "data.frame",
+    grid = "function",
+    fit = "function",
+    predict = "function",
+    prob = "function",
+    sort = "function"
+  )
+
+  for (element in names(required_elements)) {
+    if (!(element %in% names(method))) {
+      stop(sprintf('Custom method must be defined with a "%s" component.', element))
+    }
+
+    if (!inherits(method[[element]], required_elements[[element]])) {
+      stop(sprintf('Component "%s" of the custom method must be of type %s.', element, required_elements[[element]]))
+    }
+  }
+}
+
+#' @title Extract the best predictions from a `caret::train` object
+#' @description Extract the best predictions from a `caret::train` object.
+#' @param model A `caret::train` object
+#' @param aggregate_resamples Logical, whether to aggregate resamples by keys. Default is TRUE.
+#' @return A `data.table::data.table` with predictions
+#' @noRd
+.extract_best_preds <- function(model, aggregate_resamples = TRUE) {
+  stopifnot(is.logical(aggregate_resamples), length(aggregate_resamples) == 1L, inherits(model, "train"))
+
+  if (is.null(model[["pred"]])) {
+    stop("No predictions saved during training. Please set savePredictions = 'final' in trControl", call. = FALSE)
+  }
+
+  stopifnot(inherits(model$pred, "data.frame"))
+
+  if (nrow(model$bestTune) > 0) {
+    keys <- names(model$bestTune)
+    best_tune <- data.table::data.table(model$bestTune, key = keys)
+
+    pred <- data.table::data.table(model$pred, key = keys)
+
+    pred <- pred[best_tune, ]
+  } else {
+    pred <- data.table::data.table(model$pred)
+  }
+
+  keys <- "rowIndex"
+  data.table::setkeyv(pred, keys)
+
+  if (aggregate_resamples) {
+    pred <- pred[, lapply(.SD, .aggregate_vector), by = keys]
+  }
+
+  data.table::setorderv(pred, keys)
+
+  pred
+}
+
+#' @title Aggregate vector
+#' @description Aggregate a vector depending on its type. For numeric data return the mean. For factor data return the first value.
+#' @param x A vector to be aggregated.
+#' @return The mean of numeric data or the first value of non-numeric data.
+#' @noRd
+.aggregate_vector <- function(x) {
+  if (is.numeric(x)) {
+    mean(x)
+  } else {
+    x[[1L]]
+  }
+}
+
