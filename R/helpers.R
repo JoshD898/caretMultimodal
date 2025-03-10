@@ -22,7 +22,7 @@
     inherits(model, "train")
   )
 
-  is_class <- .is_classifer_and_validate(model, validate_for_stacking = is.null(new_data))
+  is_class <- .is_classifier_and_validate(model, validate_for_stacking = is.null(new_data))
 
   if (is.null(new_data)) {
     pred <- .extract_best_preds(model, aggregate_resamples = aggregate_resamples)
@@ -38,15 +38,14 @@
       stopifnot(is.data.frame(pred))
     } else {
       pred <- stats::predict(model, type = "raw", newdata = new_data, ...)
-      stopifnot(is.numeric(pred))
-      if (!is.vector(pred)) {
-        pred <- as.vector(pred)
-      }
+
+      pred <- as.vector(pred)
+
       stopifnot(
-        is.vector(pred),
         is.numeric(pred),
         is.null(dim(pred))
       )
+
       pred <- unname(pred)
     }
     pred <- data.table::data.table(pred)
@@ -82,7 +81,7 @@
 #' @param validate_for_stacking a logical indicating whether to validate the model for stacked predictions
 #' @return a logical. TRUE if classifier, otherwise FALSE.
 #' @noRd
-.is_classifer_and_validate <- function(model, validate_for_stacking = TRUE) {
+.is_classifier_and_validate <- function(model, validate_for_stacking = TRUE) {
   stopifnot(inherits(model, "train"))
 
   is_class <- .is_classifier(model)
@@ -114,12 +113,10 @@
 #' @return A logical indicating whether the model is a classifier.
 #' @noRd
 .is_classifier <- function(model) {
-  stopifnot(inherits(model, "train") || inherits(model, "caretStack"))
-  if (inherits(model, "train")) {
-    out <- model$modelType == "Classification"
-  } else {
-    out <- model$ensemble_model$modelType == "Classification"
-  }
+  stopifnot(inherits(model, "train"))
+
+  out <- model$modelType == "Classification"
+
   out
 }
 
@@ -127,57 +124,57 @@
 
 #' @title Drop Excluded Class
 #' @description Drop the excluded class from a prediction data.table
-#' @param x a data.table of predictions
+#' @param pred a data.table of predictions
 #' @param all_classes a character vector of all classes
 #' @param excluded_class_id an integer indicating the class to exclude
+#' @return pred with the excluded_class_id column dropped
 #' @noRd
-.drop_excluded_class <- function(x, all_classes, excluded_class_id) {
-  stopifnot(methods::is(x, "data.table"), is.character(all_classes))
+.drop_excluded_class <- function(pred, all_classes, excluded_class_id) {
+  stopifnot(inherits(pred, "data.table"), is.character(all_classes))
   excluded_class_id <- .validate_excluded_class(excluded_class_id)
   if (length(all_classes) > 1L) {
-    excluded_class <- all_classes[excluded_class_id] # Note that if excluded_class_id is 0, no class will be excluded
+    excluded_class <- all_classes[excluded_class_id]
     classes_included <- setdiff(all_classes, excluded_class)
-    x <- x[, classes_included, drop = FALSE, with = FALSE]
+    pred <- pred[, classes_included, drop = FALSE, with = FALSE]
   }
-  x
+  pred
 }
 
 #' @title Validate the excluded class
 #' @description Helper function to ensure that the excluded level for classification is an integer.
 #' Set to 0L to exclude no class.
-#' @param arg The value to check
+#' @param excluded_class_id The value to check
 #' @return integer
 #' @noRd
-.validate_excluded_class <- function(arg) {
-  # Handle the null case (usually old object where the missing level was not defined)
-  if (is.null(arg)) {
-    arg <- 1L
+.validate_excluded_class <- function(excluded_class_id) {
+
+  if (is.null(excluded_class_id)) {
+    excluded_class_id <- 1L
     warning("No excluded_class_id set. Setting to 1L.", call. = FALSE)
   }
-  # Check the input
-  if (!is.numeric(arg)) {
-    stop("classification excluded level must be numeric: ", arg, call. = FALSE)
+
+  if (!is.numeric(excluded_class_id)) {
+    stop("classification excluded level must be numeric: ", excluded_class_id, call. = FALSE)
   }
-  if (length(arg) != 1L) {
-    stop("classification excluded level must have a length of 1: length=", length(arg), call. = FALSE)
+  if (length(excluded_class_id) != 1L) {
+    stop("classification excluded level must have a length of 1: length=", length(excluded_class_id), call. = FALSE)
   }
 
-  # Convert to integer if possible
-  if (is.integer(arg)) {
-    out <- arg
+  if (is.integer(excluded_class_id)) {
+    out <- excluded_class_id
   } else {
-    warning("classification excluded level is not an integer: ", arg, call. = FALSE)
-    if (is.numeric(arg)) {
-      out <- floor(arg)
+    warning("classification excluded level is not an integer: ", excluded_class_id, call. = FALSE)
+    if (is.numeric(excluded_class_id)) {
+      out <- floor(excluded_class_id)
     }
     out <- suppressWarnings(as.integer(out))
   }
-  # Check the output
+
   if (!is.finite(out)) {
-    stop("classification excluded level must be finite: ", arg, call. = FALSE)
+    stop("classification excluded level must be finite: ", excluded_class_id, call. = FALSE)
   }
   if (out < 0L) {
-    stop("classification excluded level must be >= 0: ", arg, call. = FALSE)
+    stop("classification excluded level must be >= 0: ", excluded_class_id, call. = FALSE)
   }
 
   out
@@ -287,7 +284,7 @@
 
 
 
-# Extracting from ``caret::train` objects` -------------------------------------
+# Extracting from `caret::train` objects` --------------------------------------
 
 #' @title Extract accuracy metrics from a `caret::train` model
 #' @description Extract the cross-validated accuracy metrics and their standard deviations.

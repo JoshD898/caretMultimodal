@@ -1,3 +1,5 @@
+# Setup ------------------------------------------------------------------------
+
 set.seed(192L)
 
 numeric_vector <- runif(30)
@@ -39,35 +41,101 @@ named_data_list = list(numeric = numeric_table,
 numeric_model <- suppressWarnings(caret::train(x = numeric_table, y = numeric_vector, method = "rf", trControl = .default_control(numeric_vector)))
 factor_model <- suppressWarnings(caret::train(x = numeric_table, y = binary_factor_vector, method = "glm", trControl = .default_control(binary_factor_vector)))
 
-named_models <- caret_list(target = numeric_vector, data_list = named_data_list, method = "rf")
-unnamed_models <- caret_list(target = numeric_vector, data_list = unnamed_data_list, method = "rf")
+# Test caret prediction wrapper ------------------------------------------------
+testthat::test_that(".caret_predict", {
+  numeric_new_data <- numeric_table[1:5, ]
+  numeric_pred <- .caret_predict(numeric_model, new_data = numeric_new_data)
 
-# Tests ------------------------------------------------------------------------
+  expect_equal(ncol(numeric_pred), 1L)
+  expect_equal(nrow(numeric_pred), 5L)
+  expect_equal(names(numeric_pred), "pred")
+  expect_true(is.numeric(numeric_pred$pred))
 
-testthat::test_that("extract_best_preds", {
-  testthat::expect_error(.extract_best_preds(model = "NOT_A_MODEL"))
-  testthat::expect_error(.extract_best_preds(model = numeric_model, aggregate_resamples = "NOT_A_BOOLEAN"))
+  factor_new_data <- numeric_table[1:5, ]
+  factor_pred_no_exclude <- .caret_predict(factor_model, new_data = factor_new_data, excluded_class_id = 0L)
+  factor_pred_with_exclude <- .caret_predict(factor_model, new_data = factor_new_data, excluded_class_id = 1L)
 
-  model_no_pred <- numeric_model
-  model_no_pred$pred <- NULL
+  expect_equal(ncol(factor_pred_no_exclude), 2L)
+  expect_equal(nrow(factor_pred_no_exclude), 5L)
+  expect_equal(names(factor_pred_no_exclude), c("Type1", "Type2"))
+  expect_true(is.numeric(factor_pred_no_exclude$Type1))
+  expect_true(is.numeric(factor_pred_no_exclude$Type2))
 
-  testthat::expect_error(.extract_best_preds(model = model_no_pred),
-                         "No predictions saved during training. Please set savePredictions = 'final' in trControl")
-
-  preds_no_bestTune <- .extract_best_preds(model = factor_model)
-  preds_with_bestTune <- .extract_best_preds(model = numeric_model)
-
-  testthat::expect_true(inherits(preds_no_bestTune, "data.table"))
-  testthat::expect_true(inherits(preds_with_bestTune, "data.table"))
-
-  testthat::expect_equal(nrow(preds_no_bestTune), 30)
-  testthat::expect_equal(nrow(preds_with_bestTune), 30)
+  expect_equal(ncol(factor_pred_with_exclude), 1L)
+  expect_equal(nrow(factor_pred_with_exclude), 5L)
+  expect_equal(names(factor_pred_with_exclude), "Type2")
+  expect_true(is.numeric(factor_pred_with_exclude$Type2))
 })
 
-testthat::test_that("aggregate_vector", {
-  testthat::expect_equal(.aggregate_vector(c(1, 2, 3, 4)), 2.5)
-  testthat::expect_equal(.aggregate_vector(c("a", "b", "c")), "a")
+# Test validating models -------------------------------------------------------
+testthat::test_that(".is_classifer_and_validate", {
+  sample_model <- factor_model
+
+  sample_model$modelInfo$prob <- NULL
+
+  testthat::expect_true(.is_classifier_and_validate(factor_model))
+  testthat::expect_error(.is_classifier_and_validate(sample_model), "No probability function found. Re-fit with a method that supports prob.")
+  testthat::expect_false(.is_classifier_and_validate(numeric_model))
 })
+
+testthat::test_that(".is_classifier", {
+  testthat::expect_true(.is_classifier(factor_model))
+  testthat::expect_false(.is_classifier(numeric_model))
+})
+
+# Test dropping excluded classes -----------------------------------------------
+testthat::test_that(".drop_excluded_class", {
+  testthat::expect_equal(.drop_excluded_class(numeric_table, names(numeric_table), 1L), numeric_table[, -1, with = FALSE])
+  testthat::expect_equal(.drop_excluded_class(numeric_table, names(numeric_table), 0L), numeric_table)
+})
+
+testthat::test_that(".validate_excluded_class", {
+  testthat::expect_error(.validate_excluded_class("a"), "classification excluded level must be numeric")
+  testthat::expect_error(.validate_excluded_class(c(1L, 2L)), "classification excluded level must have a length of 1")
+  testthat::expect_error(.validate_excluded_class(NA), "classification excluded level must be numeric: NA")
+  testthat::expect_error(.validate_excluded_class(-1L), "classification excluded level must be >= 0")
+
+  testthat::expect_warning(test <- .validate_excluded_class(3.5), "classification excluded level is not an integer")
+  testthat::expect_equal(test, 3L)
+
+  testthat::expect_equal(.validate_excluded_class(1L), 1L)
+  testthat::expect_equal(.validate_excluded_class(0L), 0L)
+
+
+  testthat::expect_warning(test <- .validate_excluded_class(NULL), "No excluded_class_id set. Setting to 1L.")
+  testthat::expect_equal(test, 1L)
+})
+
+# Test default metrics and controls --------------------------------------------
+
+testthat::test_that("defaul_metric", {
+  testthat::expect_equal(.default_metric(numeric_vector), "RMSE")
+  testthat::expect_equal(.default_metric(binary_factor_vector), "ROC")
+  testthat::expect_equal(.default_metric(three_factor_vector), "Accuracy")
+})
+
+testthat::test_that("default_control", {
+
+  ctrl_numeric <- .default_control(numeric_vector)
+  testthat::expect_equal(ctrl_numeric$method, "cv")
+  testthat::expect_equal(ctrl_numeric$number, 5L)
+  testthat::expect_false(ctrl_numeric$classProbs)
+  testthat::expect_identical(ctrl_numeric$summaryFunction, caret::defaultSummary)
+  testthat::expect_false(ctrl_numeric$returnData)
+  testthat::expect_length(ctrl_numeric$index, 5L)
+
+
+  ctrl_binary <- .default_control(binary_factor_vector)
+  testthat::expect_identical(ctrl_binary$summaryFunction, caret::twoClassSummary)
+  testthat::expect_true(ctrl_binary$classProbs)
+
+
+  ctrl_multi <- .default_control(three_factor_vector)
+  testthat::expect_identical(ctrl_multi$summaryFunction, caret::defaultSummary)
+  testthat::expect_true(ctrl_multi$classProbs)
+})
+
+# Test method validation -------------------------------------------------------
 
 testthat::test_that("check_method", {
   valid_custom_method <- list(
@@ -112,32 +180,7 @@ testthat::test_that("check_method", {
   testthat::expect_error(.check_method("INVALID_METHOD"))
 })
 
-testthat::test_that("defaul_metric", {
-  testthat::expect_equal(.default_metric(numeric_vector), "RMSE")
-  testthat::expect_equal(.default_metric(binary_factor_vector), "ROC")
-  testthat::expect_equal(.default_metric(three_factor_vector), "Accuracy")
-})
-
-testthat::test_that("default_control", {
-
-  ctrl_numeric <- .default_control(numeric_vector)
-  testthat::expect_equal(ctrl_numeric$method, "cv")
-  testthat::expect_equal(ctrl_numeric$number, 5L)
-  testthat::expect_false(ctrl_numeric$classProbs)
-  testthat::expect_identical(ctrl_numeric$summaryFunction, caret::defaultSummary)
-  testthat::expect_false(ctrl_numeric$returnData)
-  testthat::expect_length(ctrl_numeric$index, 5L)
-
-
-  ctrl_binary <- .default_control(binary_factor_vector)
-  testthat::expect_identical(ctrl_binary$summaryFunction, caret::twoClassSummary)
-  testthat::expect_true(ctrl_binary$classProbs)
-
-
-  ctrl_multi <- .default_control(three_factor_vector)
-  testthat::expect_identical(ctrl_multi$summaryFunction, caret::defaultSummary)
-  testthat::expect_true(ctrl_multi$classProbs)
-})
+# Test extracting from `caret::train` objects` ---------------------------------
 
 testthat::test_that("exctract_train_metric", {
 
@@ -152,4 +195,29 @@ testthat::test_that("exctract_train_metric", {
   testthat::expect_equal(result$metric[1], "RMSE")
   testthat::expect_true(is.numeric(result$value))
   testthat::expect_true(is.numeric(result$sd))
+})
+
+testthat::test_that("extract_best_preds", {
+  testthat::expect_error(.extract_best_preds(model = "NOT_A_MODEL"))
+  testthat::expect_error(.extract_best_preds(model = numeric_model, aggregate_resamples = "NOT_A_BOOLEAN"))
+
+  model_no_pred <- numeric_model
+  model_no_pred$pred <- NULL
+
+  testthat::expect_error(.extract_best_preds(model = model_no_pred),
+                         "No predictions saved during training. Please set savePredictions = 'final' in trControl")
+
+  preds_no_bestTune <- .extract_best_preds(model = factor_model)
+  preds_with_bestTune <- .extract_best_preds(model = numeric_model)
+
+  testthat::expect_true(inherits(preds_no_bestTune, "data.table"))
+  testthat::expect_true(inherits(preds_with_bestTune, "data.table"))
+
+  testthat::expect_equal(nrow(preds_no_bestTune), 30)
+  testthat::expect_equal(nrow(preds_with_bestTune), 30)
+})
+
+testthat::test_that("aggregate_vector", {
+  testthat::expect_equal(.aggregate_vector(c(1, 2, 3, 4)), 2.5)
+  testthat::expect_equal(.aggregate_vector(c("a", "b", "c")), "a")
 })

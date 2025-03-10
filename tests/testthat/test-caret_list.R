@@ -1,5 +1,4 @@
 # Setup ------------------------------------------------------------------------
-# TODO reorganize helper tests
 set.seed(192L)
 
 numeric_vector <- runif(30)
