@@ -1,16 +1,16 @@
-#' @title Prediction wrapper for \code{\link[caret]{train}}
-#' @description This is a prediction wrapper for \code{\link[caret]{train}} with several features:
+#' @title Prediction wrapper for `caret::train`
+#' @description This is a prediction wrapper for `caret::train` with several features:
 #' - If new_data is null, return stacked predictions from the training job, rather than in-sample predictions.
 #' - Always returns probabilities for classification models.
 #' - Optionally drops one predicted class for classification models.
-#' - Always returns a \code{\link[data.table]{data.table}}
-#' @param model a \code{\link[caret]{train}} object
-#' @param new_data New data to use for predictions. If NULL, stacked predictions from the training data are returned.
+#' - Always returns a `data.table::data.table`
+#' @param model a `caret::train` object
+#' @param new_data New data to use for predictions. If `NULL`, stacked predictions from the training data are returned.
 #' @param excluded_class_id an integer indicating the class to exclude. If 0L, no class is excluded
 #' @param aggregate_resamples logical, whether to aggregate resamples by keys. Default is TRUE.
 #' @param ... additional arguments to pass to \code{\link[caret]{predict.train}}, if new_data is not NULL
 #' @return A vector of predictions
-#' @keywords internal
+#' @noRd
 .caret_predict <- function(model,
                           new_data = NULL,
                           excluded_class_id = 1L,
@@ -19,19 +19,16 @@
   stopifnot(
     is.logical(aggregate_resamples),
     length(aggregate_resamples) == 1L,
-    methods::is(model, "train")
+    inherits(model, "train")
   )
 
-  # Extract the model type
   is_class <- .is_classifer_and_validate(model, validate_for_stacking = is.null(new_data))
 
-  # If new_data is NULL, return the stacked predictions
   if (is.null(new_data)) {
     pred <- .extract_best_preds(model, aggregate_resamples = aggregate_resamples)
     keep_cols <- if (is_class) levels(model) else "pred"
     pred <- pred[, keep_cols, with = FALSE]
 
-    # Otherwise, predict on new_data
   } else {
     if (any(model[["modelInfo"]][["library"]] %in% c("neuralnet", "klaR"))) {
       new_data <- as.matrix(new_data)
@@ -43,7 +40,7 @@
       pred <- stats::predict(model, type = "raw", new_data = new_data, ...)
       stopifnot(is.numeric(pred))
       if (!is.vector(pred)) {
-        pred <- as.vector(pred) # Backwards compatability with older earth and caret::train models
+        pred <- as.vector(pred)
       }
       stopifnot(
         is.vector(pred),
@@ -75,17 +72,18 @@
   pred
 }
 
+# Validating models ------------------------------------------------------------
 
 #' @title Validate a model type
-#' @description Validate the model type from a \code{\link[caret]{train}} object.
+#' @description Validate the model type from a `caret::train` object.
 #' For classification, validates that the model can predict probabilities, and,
 #'  if stacked predictions are requested, that classProbs = TRUE.
-#' @param model a \code{\link[caret]{train}} object
+#' @param model a `caret::train` object
 #' @param validate_for_stacking a logical indicating whether to validate the model for stacked predictions
 #' @return a logical. TRUE if classifier, otherwise FALSE.
-#' @keywords internal
+#' @noRd
 .is_classifer_and_validate <- function(model, validate_for_stacking = TRUE) {
-  stopifnot(methods::is(model, "train"))
+  stopifnot(inherits(model, "train"))
 
   is_class <- .is_classifier(model)
 
@@ -114,24 +112,25 @@
 #' @description Check if a model is a classifier.
 #' @param model A train object from the caret package.
 #' @return A logical indicating whether the model is a classifier.
-#' @keywords internal
+#' @noRd
 .is_classifier <- function(model) {
-  stopifnot(methods::is(model, "train") || methods::is(model, "caretStack"))
-  if (methods::is(model, "train")) {
+  stopifnot(inherits(model, "train") || inherits(model, "caretStack"))
+  if (inherits(model, "train")) {
     out <- model$modelType == "Classification"
   } else {
-    out <- model$ens_model$modelType == "Classification"
+    out <- model$ensemble_model$modelType == "Classification"
   }
   out
 }
 
+# Dropping excluded classes ----------------------------------------------------
 
 #' @title Drop Excluded Class
 #' @description Drop the excluded class from a prediction data.table
 #' @param x a data.table of predictions
 #' @param all_classes a character vector of all classes
 #' @param excluded_class_id an integer indicating the class to exclude
-#' @keywords internal
+#' @noRd
 .drop_excluded_class <- function(x, all_classes, excluded_class_id) {
   stopifnot(methods::is(x, "data.table"), is.character(all_classes))
   excluded_class_id <- .validate_excluded_class(excluded_class_id)
@@ -148,7 +147,7 @@
 #' Set to 0L to exclude no class.
 #' @param arg The value to check
 #' @return integer
-#' @keywords internal
+#' @noRd
 .validate_excluded_class <- function(arg) {
   # Handle the null case (usually old object where the missing level was not defined)
   if (is.null(arg)) {
@@ -183,6 +182,8 @@
 
   out
 }
+
+# Default metrics and controls -------------------------------------------------
 
 #' @title Construct a default metric for use with caret_list
 #' @description Determines the default metric based on the type of target vector.
@@ -230,33 +231,9 @@
   )
 }
 
-#' @title Extract accuracy metrics from a `caret::train` model
-#' @description Extract the cross-validated accuracy metrics and their standard deviations.
-#' @param x a `caret::train` object
-#' @param metric a character string representing the metric to extract. If NULL, uses the metric that was used to train the model.
-#' @return A `data.table::data.table` with the name, value and standard deviation of the metric
-#' @noRd
-.extract_train_metric <- function(x, metric = NULL) {
-  if (is.null(metric) || !metric %in% names(x$results)) {
-    metric <- x$metric
-  }
 
-  results <- data.table::data.table(x$results, key = names(x$bestTune))
-  best_tune <- data.table::data.table(x$bestTune, key = names(x$bestTune))
 
-  best_results <- results[best_tune, ]
-  value <- best_results[[metric]]
-  stdev <- best_results[[paste0(metric, "SD")]]
-  if (is.null(stdev)) stdev <- NA_real_
-
-  out <- data.table::data.table(
-    method = x$method,
-    metric = metric,
-    value = value,
-    sd = stdev
-  )
-  out
-}
+# Method validation ------------------------------------------------------------
 
 #' @title Check that the method supplied by the user is a valid caret method
 #' @description Uses `caret::modelLookup()` to ensure the method supplied by the user
@@ -308,6 +285,39 @@
   }
 }
 
+
+
+# Extracting from ``caret::train` objects` -------------------------------------
+
+#' @title Extract accuracy metrics from a `caret::train` model
+#' @description Extract the cross-validated accuracy metrics and their standard deviations.
+#' @param x a `caret::train` object
+#' @param metric a character string representing the metric to extract. If NULL, uses the metric that was used to train the model.
+#' @return A `data.table::data.table` with the name, value and standard deviation of the metric
+#' @noRd
+.extract_train_metric <- function(model, metric = NULL) {
+  if (is.null(metric) || !metric %in% names(model$results)) {
+    metric <- model$metric
+  }
+
+  results <- data.table::data.table(model$results, key = names(model$bestTune))
+  best_tune <- data.table::data.table(model$bestTune, key = names(model$bestTune))
+
+  best_results <- results[best_tune, ]
+
+  value <- best_results[[metric]]
+  stdev <- best_results[[paste0(metric, "SD")]]
+  if (is.null(stdev)) stdev <- NA_real_
+
+  out <- data.table::data.table(
+    method = model$method,
+    metric = metric,
+    value = value,
+    sd = stdev
+  )
+  out
+}
+
 #' @title Extract the best predictions from a `caret::train` object
 #' @description Extract the best predictions from a `caret::train` object.
 #' @param model A `caret::train` object
@@ -323,12 +333,11 @@
 
   stopifnot(inherits(model$pred, "data.frame"))
 
-  if (nrow(model$bestTune) > 0) {
+  if (!is.null(model$bestTune) && nrow(model$bestTune) > 0) {
     keys <- names(model$bestTune)
     best_tune <- data.table::data.table(model$bestTune, key = keys)
 
     pred <- data.table::data.table(model$pred, key = keys)
-
     pred <- pred[best_tune, ]
   } else {
     pred <- data.table::data.table(model$pred)

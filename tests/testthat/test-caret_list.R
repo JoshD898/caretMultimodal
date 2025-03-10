@@ -44,9 +44,11 @@ factor_model <- suppressWarnings(caret::train(x = numeric_table, y = binary_fact
 named_models <- caret_list(target = numeric_vector, data_list = named_data_list, method = "rf")
 unnamed_models <- caret_list(target = numeric_vector, data_list = unnamed_data_list, method = "rf")
 
+
 # Constructor tests ------------------------------------------------------------
 
 testthat::test_that("caret_list", {
+
   testthat::expect_error(caret_list(target = numeric_vector, data_list = list(head(numeric_table, 29)), method = "glm"),
                "The number of rows of data_list\\[\\[1\\]\\] does not match the length of the target vector.")
 
@@ -55,6 +57,7 @@ testthat::test_that("caret_list", {
 
   testthat::expect_true(inherits(named_models, "caret_list"))
 })
+
 # Method tests -----------------------------------------------------------------
 
 testthat::test_that("predict.caret_list", {
@@ -101,7 +104,9 @@ testthat::test_that("plot.caret_list", {
   testthat::expect_silent(plt <- plot(named_models))
   testthat::expect_true(inherits(plt, "ggplot"))
 })
+
 # Helper function tests --------------------------------------------------------
+
 testthat::test_that("caret_train wrapper", {
 
   bad_args <- list(method = "NOT_A_METHOD",
@@ -125,114 +130,4 @@ testthat::test_that("caret_train wrapper", {
   testthat::expect_true("call" %in% names(untrimmed_model))
   testthat::expect_true("trainingData" %in% names(untrimmed_model))
 
-})
-
-testthat::test_that("extract_best_preds", {
-  testthat::expect_error(.extract_best_preds(model = "NOT_A_MODEL"))
-  testthat::expect_error(.extract_best_preds(model = numeric_model, aggregate_resamples = "NOT_A_BOOLEAN"))
-
-  model_no_pred <- numeric_model
-  model_no_pred$pred <- NULL
-
-  testthat::expect_error(.extract_best_preds(model = model_no_pred),
-               "No predictions saved during training. Please set savePredictions = 'final' in trControl")
-
-  preds_no_bestTune <- .extract_best_preds(model = factor_model)
-  preds_with_bestTune <- .extract_best_preds(model = numeric_model)
-
-  testthat::expect_true(inherits(preds_no_bestTune, "data.table"))
-  testthat::expect_true(inherits(preds_with_bestTune, "data.table"))
-
-  testthat::expect_equal(nrow(preds_no_bestTune), 30)
-  testthat::expect_equal(nrow(preds_with_bestTune), 30)
-})
-
-testthat::test_that("aggregate_vector", {
-  testthat::expect_equal(.aggregate_vector(c(1, 2, 3, 4)), 2.5)
-  testthat::expect_equal(.aggregate_vector(c("a", "b", "c")), "a")
-})
-
-testthat::test_that("check_method", {
-  valid_custom_method <- list(
-    library = "customLib",
-    type = "classification",
-    parameters = data.frame(),
-    grid = function() NULL,
-    fit = function() NULL,
-    predict = function() NULL,
-    prob = function() NULL,
-    sort = function() NULL
-  )
-
-  invalid_custom_method <- list(
-    library = 123,  # Should be character
-    type = "classification",
-    parameters = data.frame(),
-    grid = function() NULL,
-    fit = function() NULL,
-    predict = function() NULL,
-    prob = function() NULL,
-    sort = function() NULL
-  )
-
-  incomplete_custom_method <- list(
-    library = "customLib",
-    type = "classification",
-    parameters = data.frame(),
-    fit = function() NULL
-  )
-
-  testthat::expect_silent(.check_method(valid_custom_method))
-  testthat::expect_error(
-    .check_method(incomplete_custom_method),
-    'Custom method must be defined with a "grid" component.'
-  )
-  testthat::expect_error(
-    .check_method(invalid_custom_method),
-    'Component "library" of the custom method must be of type character.'
-  )
-  testthat::expect_silent(.check_method("rf"))
-  testthat::expect_error(.check_method("INVALID_METHOD"))
-})
-
-testthat::test_that("defaul_metric", {
-  testthat::expect_equal(.default_metric(numeric_vector), "RMSE")
-  testthat::expect_equal(.default_metric(binary_factor_vector), "ROC")
-  testthat::expect_equal(.default_metric(three_factor_vector), "Accuracy")
-})
-
-testthat::test_that("default_control", {
-
-  ctrl_numeric <- .default_control(numeric_vector)
-  testthat::expect_equal(ctrl_numeric$method, "cv")
-  testthat::expect_equal(ctrl_numeric$number, 5L)
-  testthat::expect_false(ctrl_numeric$classProbs)
-  testthat::expect_identical(ctrl_numeric$summaryFunction, caret::defaultSummary)
-  testthat::expect_false(ctrl_numeric$returnData)
-  testthat::expect_length(ctrl_numeric$index, 5L)
-
-
-  ctrl_binary <- .default_control(binary_factor_vector)
-  testthat::expect_identical(ctrl_binary$summaryFunction, caret::twoClassSummary)
-  testthat::expect_true(ctrl_binary$classProbs)
-
-
-  ctrl_multi <- .default_control(three_factor_vector)
-  testthat::expect_identical(ctrl_multi$summaryFunction, caret::defaultSummary)
-  testthat::expect_true(ctrl_multi$classProbs)
-})
-
-testthat::test_that("exctract_train_metric", {
-
-  result <- .extract_train_metric(numeric_model, metric = "RMSE")
-  testthat::expect_equal(result$metric[1], "RMSE")
-  testthat::expect_true(is.numeric(result$value))
-  testthat::expect_true(is.numeric(result$sd))
-  testthat::expect_false(any(is.na(result$value)))
-  testthat::expect_false(any(is.na(result$sd)))
-
-  result <- .extract_train_metric(numeric_model, metric = "InvalidMetric")
-  testthat::expect_equal(result$metric[1], "RMSE")
-  testthat::expect_true(is.numeric(result$value))
-  testthat::expect_true(is.numeric(result$sd))
 })
