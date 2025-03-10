@@ -54,8 +54,9 @@ testthat::test_that("caret_list", {
 
   testthat::expect_equal(names(named_models), c("numeric_model", "factor_model", "mixed_model"))
   testthat::expect_equal(names(unnamed_models), c("data_list[[1]]_model", "data_list[[2]]_model", "data_list[[3]]_model"))
-
   testthat::expect_true(inherits(named_models, "caret_list"))
+
+
 })
 
 # Method tests -----------------------------------------------------------------
@@ -70,8 +71,37 @@ testthat::test_that("predict.caret_list", {
   preds <- predict(named_models)
 
   testthat::expect_true(inherits(preds, "data.table"))
-
   testthat::expect_equal(nrow(preds), 30)
+  testthat::expect_equal(ncol(preds), 3)
+
+  new_numeric_table <- data.table::data.table(
+    Var1 = runif(30),
+    Var2 = rnorm(30),
+    Var3 = runif(30, 10, 50),
+    Var4 = rpois(30, lambda = 5),
+    Var5 = rnorm(30, mean = 100, sd = 15)
+  )
+
+  new_factor_table <- data.table::data.table(
+    Var1 = factor(sample(c("A", "B", "C"), 30, replace = TRUE)),
+    Var2 = factor(sample(c("X", "Y", "Z"), 30, replace = TRUE)),
+    Var3 = factor(sample(c("Red", "Blue", "Green"), 30, replace = TRUE)),
+    Var4 = factor(sample(c("Small", "Medium", "Large"), 30, replace = TRUE)),
+    Var5 = factor(sample(c("Yes", "No"), 30, replace = TRUE))
+  )
+
+  new_mixed_table <- data.table::data.table(
+    Num1 = runif(30),
+    Num2 = rnorm(30),
+    Num3 = rpois(30, lambda = 5),
+    Factor1 = factor(sample(c("Apple", "Banana", "Cherry"), 30, replace = TRUE)),
+    Factor2 = factor(sample(c("Hot", "Cold"), 30, replace = TRUE))
+  )
+
+  new_preds <- predict(named_models, new_data_list = list(new_numeric_table, new_factor_table, new_mixed_table))
+
+  testthat::expect_equal(ncol(new_preds), 3)
+  testthat::expect_equal(nrow(new_preds), 30)
 })
 
 testthat::test_that("predict.caret_list", {
