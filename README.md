@@ -8,18 +8,6 @@ CaretMultimodal is a wrapper around the [caret](https://github.com/topepo/caret)
 multi-dataset training and ensembling. It is heavily inspired by Zach Mayer's 
 [caretEnsemble](https://github.com/zachmayer/caretEnsemble) package.
 
-## TEMP NOTES
-
-* caret_stack seems to produce worse metrics than the base models more often than not. Not sure if this is because I am coding something wrong, or if this is just a consequence of the training methods I am using
-* I am working on an autoplot for caret_stack, similar to the one from caretEnsemble
-* I am still working on unit testing
-* Are there any important functionalities that are missing? For example, a wrapper around caret_list and caret_stack so everything can be done from 1 function?
-
-* Next steps:
-1) Implement autopot method for caret_stack
-2) Finish unit tests, get 100% code coverage
-3) Upload to CRAN?
-
 ## Example Usage
 
 For the following examples, we will [these publicly available data sets](https://amritsingh.shinyapps.io/omicsBioAnalytics/) on heart failure. 
@@ -29,7 +17,7 @@ Let's train models on the **cells, holter, and protein** data sets to predict pa
 
 ### Creating a `caret_list` object
 ```r
-models <- caret_list(
+models <- caretMultimodal::caret_list(
     target = demo$hospitalizations, 
     data_list = list(cells = cells, holter = holter, proteins = proteins), 
     method = "glm"
@@ -61,7 +49,7 @@ plot(models)
 
 The `caret_stack` function trains a new `caret::train` object on the predictions from models in a `caret_list`. Let's use the **Random Forest** method to ensemble the models we just trained.
 ```r
-stack <- caret_stack(
+stack <- caretMultimodal::caret_stack(
     caret_list = models,
     method = "rf"
 )
@@ -98,6 +86,11 @@ plot(stack)
 ```
 ![image](https://github.com/user-attachments/assets/6e19364d-7121-446c-9769-ffefa16c497f)
 
+## Installation
+The package can be installed using devtools
+```r
+devtools::install_github("JoshD898/caretMultimodal")
+```
 
 ## Project Structure
 
