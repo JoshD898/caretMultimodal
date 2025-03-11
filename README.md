@@ -86,7 +86,9 @@ predict(
 
 plot(stack)
 ```
-![image](https://github.com/user-attachments/assets/6e19364d-7121-446c-9769-ffefa16c497f)
+![image](https://github.com/user-attachments/assets/c4868fe3-d018-4b1c-b492-08ae22a8cd56)
+![image](https://github.com/user-attachments/assets/055d13ee-fe36-48b4-ad31-a5c8460ec651)
+
 
 ## Installation
 The package can be installed using devtools
