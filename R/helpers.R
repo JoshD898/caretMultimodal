@@ -330,7 +330,7 @@
 
   stopifnot(inherits(model$pred, "data.frame"))
 
-  if (!is.null(model$bestTune) && nrow(model$bestTune) > 0) {
+  if (!is.null(model$bestTune) && nrow(model$bestTune) > 0 && !(ncol(model$bestTune) == 1 && model$bestTune[[1]] == "none")) {
     keys <- names(model$bestTune)
     best_tune <- data.table::data.table(model$bestTune, key = keys)
 

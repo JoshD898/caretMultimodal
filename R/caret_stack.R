@@ -115,7 +115,7 @@ print.caret_stack <- function(caret_stack) {
 #' @export
 summary.caret_stack <- function(caret_stack) {
   metric <- caret_stack$ensemble_model$metric
-  imp <- caret::varImp(test_stack$ensemble_model$finalModel, scale = TRUE)
+  imp <- caret::varImp(caret_stack$ensemble_model$finalModel, scale = TRUE)
   imp$Overall <- imp$Overall / sum(imp$Overall) * 100
 
   out <- list(

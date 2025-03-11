@@ -1,3 +1,6 @@
+<!-- badges: start -->
+[![Codecov test coverage](https://codecov.io/gh/JoshD898/caretMultimodal/graph/badge.svg)](https://app.codecov.io/gh/JoshD898/caretMultimodal)
+<!-- badges: end -->
 
 # caretMultimodal
 

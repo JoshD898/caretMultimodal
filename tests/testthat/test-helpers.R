@@ -40,7 +40,8 @@ named_data_list = list(numeric = numeric_table,
 
 numeric_model <- suppressWarnings(caret::train(x = numeric_table, y = numeric_vector, method = "rf", trControl = .default_control(numeric_vector)))
 factor_model <- suppressWarnings(caret::train(x = numeric_table, y = binary_factor_vector, method = "glm", trControl = .default_control(binary_factor_vector)))
-
+nnet <- suppressWarnings(caret::train(x = numeric_table, y = numeric_vector, method = "neuralnet", trControl = .default_control(numeric_vector)))
+no_sd_model <- suppressWarnings(caret::train(x = numeric_table, y = binary_factor_vector, method = "glm", trControl = caret::trainControl(method = "none", savePredictions = TRUE, classProbs = TRUE)))
 # Test caret prediction wrapper ------------------------------------------------
 testthat::test_that(".caret_predict", {
   numeric_new_data <- numeric_table[1:5, ]
@@ -65,6 +66,8 @@ testthat::test_that(".caret_predict", {
   expect_equal(nrow(factor_pred_with_exclude), 5L)
   expect_equal(names(factor_pred_with_exclude), "Type2")
   expect_true(is.numeric(factor_pred_with_exclude$Type2))
+
+  expect_silent(nnet_pred <- .caret_predict(nnet, new_data = numeric_table))
 })
 
 # Test validating models -------------------------------------------------------
@@ -73,8 +76,20 @@ testthat::test_that(".is_classifer_and_validate", {
 
   sample_model$modelInfo$prob <- NULL
 
+  sample_model_2 <- factor_model
+  sample_model_2$control$savePredictions <- NULL
+
+  sample_model_3 <- factor_model
+  sample_model_3$control$savePredictions <- FALSE
+
+  sample_model_4 <- factor_model
+  sample_model_4$control$classProbs <- FALSE
+
   testthat::expect_true(.is_classifier_and_validate(factor_model))
   testthat::expect_error(.is_classifier_and_validate(sample_model), "No probability function found. Re-fit with a method that supports prob.")
+  testthat::expect_error(.is_classifier_and_validate(sample_model_2), "Must have savePredictions = 'all', 'final', or TRUE in trainControl to do stacked predictions.")
+  testthat::expect_error(.is_classifier_and_validate(sample_model_3), "Must have savePredictions = 'all', 'final', or TRUE in trainControl to do stacked predictions.")
+  testthat::expect_error(.is_classifier_and_validate(sample_model_4), "classProbs = FALSE. Re-fit with classProbs = TRUE in trainControl.")
   testthat::expect_false(.is_classifier_and_validate(numeric_model))
 })
 
@@ -84,6 +99,7 @@ testthat::test_that(".is_classifier", {
 })
 
 # Test dropping excluded classes -----------------------------------------------
+
 testthat::test_that(".drop_excluded_class", {
   testthat::expect_equal(.drop_excluded_class(numeric_table, names(numeric_table), 1L), numeric_table[, -1, with = FALSE])
   testthat::expect_equal(.drop_excluded_class(numeric_table, names(numeric_table), 0L), numeric_table)
@@ -94,6 +110,7 @@ testthat::test_that(".validate_excluded_class", {
   testthat::expect_error(.validate_excluded_class(c(1L, 2L)), "classification excluded level must have a length of 1")
   testthat::expect_error(.validate_excluded_class(NA), "classification excluded level must be numeric: NA")
   testthat::expect_error(.validate_excluded_class(-1L), "classification excluded level must be >= 0")
+  testthat::expect_error(.validate_excluded_class(Inf), "classification excluded level must be finite: Inf")
 
   testthat::expect_warning(test <- .validate_excluded_class(3.5), "classification excluded level is not an integer")
   testthat::expect_equal(test, 3L)
@@ -195,6 +212,8 @@ testthat::test_that("exctract_train_metric", {
   testthat::expect_equal(result$metric[1], "RMSE")
   testthat::expect_true(is.numeric(result$value))
   testthat::expect_true(is.numeric(result$sd))
+
+  testthat::expect_equal(.extract_train_metric(no_sd_model)$sd, NA_real_)
 })
 
 testthat::test_that("extract_best_preds", {
@@ -206,6 +225,8 @@ testthat::test_that("extract_best_preds", {
 
   testthat::expect_error(.extract_best_preds(model = model_no_pred),
                          "No predictions saved during training. Please set savePredictions = 'final' in trControl")
+
+  testthat::expect_false((!is.null(factor_model$bestTune) && nrow(factor_model$bestTune) > 0 && !(ncol(factor_model$bestTune) == 1 && factor_model$bestTune[[1]] == "none")))
 
   preds_no_bestTune <- .extract_best_preds(model = factor_model)
   preds_with_bestTune <- .extract_best_preds(model = numeric_model)
