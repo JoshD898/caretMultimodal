@@ -157,10 +157,12 @@ extract_metric.caret_stack <- function(caret_stack, metric= NULL) {
 #' @export
 plot.caret_stack <- function(caret_stack, metric = NULL) {
   dat <- extract_metric(caret_stack, metric = metric)
+  summary <- summary(caret_stack)
+
   model_order <- unique(dat[["model"]])
   dat[["model"]] <- factor(dat[["model"]], levels = model_order)
 
-  plt <- ggplot2::ggplot(
+  metric_plot <- ggplot2::ggplot(
     dat,
     ggplot2::aes(
       x = .data[["model"]],
@@ -173,7 +175,21 @@ plot.caret_stack <- function(caret_stack, metric = NULL) {
     ggplot2::geom_pointrange() +
     ggplot2::theme_bw() +
     ggplot2::labs(x = "Model", y = "Metric Value")
-  plt
+
+  imp <- summary$imp
+  importance_plot <- ggplot2::ggplot(
+    imp,
+    ggplot2::aes(
+      x = reorder(rownames(imp), Overall),
+      y = Overall
+    )
+  ) +
+    ggplot2::geom_bar(stat = "identity", fill = "skyblue") +
+    ggplot2::theme_bw() +
+    ggplot2::labs(x = "Model", y = "Relative Importance (%)")
+
+  list(metric_plot, importance_plot)
+
 }
 
 
