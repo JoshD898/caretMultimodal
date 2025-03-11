@@ -17,6 +17,8 @@ Let's train models on the **cells, holter, and protein** data sets to predict pa
 
 ### Creating a `caret_list` object
 ```r
+load(system.file("sample_data", "HeartFailure.RData", package = "caretMultimodal")) # Load the heart failure data
+
 models <- caretMultimodal::caret_list(
     target = demo$hospitalizations, 
     data_list = list(cells = cells, holter = holter, proteins = proteins), 
