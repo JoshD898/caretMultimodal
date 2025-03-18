@@ -306,7 +306,7 @@ plot.caret_list <- function (caret_list, metric = NULL) {
   data <- data.table::as.data.table(data)
   target <- data.table::as.data.table(target)
 
-  target <- target[get(identifier_column_name) %in% data[[identifier_column_name]]]
+  target <- target[target[[identifier_column_name]] %in% data[[identifier_column_name]]]
   target <- target[match(data[[identifier_column_name]], target[[identifier_column_name]])]
   target <- target[[setdiff(colnames(target), identifier_column_name)]]
   target
