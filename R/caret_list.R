@@ -3,12 +3,14 @@
 #'   The resulting list is structured for use in ensembling workflows. Users can specify the training method, control parameters,
 #'   and metrics, and the function supports error handling and model trimming for efficiency.
 #' @param target Target parameter vector, either numeric for regression or a factor/character for classification.
-#' @param data_list The data sets to train models on
+#' @param data_list A list of data sets to train models on
 #' @param method The method to train the models with. Can be a custom method or one found in `caret::modelLookup()`.
+#' @param identifier_column_name The name of a column that connects the rows in the dataset (ex. a participant ID).
+#' If provided, this column must be present in all datasets within the `data_list` for proper matching.
 #' @param trControl Control for use with the `caret::train` function. A default control will be constructed depending on the target type.
 #' @param metric Metric for use with `caret::train` function. A default metric will be constructed depending on the target type.
 #' @param continue_on_fail Logical, whether to skip over a data set if the model fails to train. Default is `FALSE`.
-#' @param trim Logical, whether the train models be trimmed to save memory and speed up stacking.
+#' @param trim Logical, whether the train models be trimmed to save memory.
 #' @param aggregate_resamples Logical, whether to aggregate stacked predictions.
 #' @param ... Any additional arguments to pass to the `caret::train` function
 #' @return A `caret_list` object, which is a list of `caret::train` model corresponding to `data_list`.
@@ -17,6 +19,7 @@ caret_list <- function(
     target,
     data_list,
     method,
+    identifier_column_name = NULL,
     trControl = NULL,
     metric = NULL,
     continue_on_fail = FALSE,
@@ -24,35 +27,66 @@ caret_list <- function(
     aggregate_resamples = TRUE,
     ...) {
 
-  stopifnot(is.vector(target))
+  if (is.null(identifier_column_name)) {
+    if (!is.vector(target)) {
+      stop("Target must be a vector when no identifier column name is provided.")
+    }
 
-  for (i in seq_along(data_list)) {
-    if (nrow(data_list[[i]]) != length(target)) {
-      stop("The number of rows of data_list[[", i, "]] does not match the length of the target vector.")
+    for (i in seq_along(data_list)) {
+      if (nrow(data_list[[i]]) != length(target)) {
+        stop("The number of rows of data_list[[", i, "]] does not match the length of the target vector, and no identifier column name was provided.")
+      }
+    }
+
+  } else {
+    for (i in seq_along(data_list)) {
+      if (!(identifier_column_name %in% colnames(data_list[[i]]))) {
+        stop("The identifier column '", identifier_column_name, "' is missing in data_list[[", i, "]].")
+      }
+    }
+
+    if (!(identifier_column_name %in% colnames(target))) {
+      stop("The identifier column '", identifier_column_name, "' is missing in the target dataframe.")
+    }
+
+    if(ncol(target) != 2) {
+      stop("Target must have exactly two columns: one serving as an identifier and the other containing values for training.")
     }
   }
 
   .check_method(method)
 
-  trControl <- if (is.null(trControl)) .default_control(target) else trControl
+  raw_target <- if (is.null(identifier_column_name)) {
+    target
+  } else {
+    .match_identifiers(target, data_list[[1]], identifier_column_name)
+  }
 
-  metric <- if (is.null(metric)) .default_metric(target) else metric
+  trControl <- if (is.null(trControl)) .default_control(raw_target) else trControl
+  metric <- if (is.null(metric)) .default_metric(raw_target) else metric
 
   train_args <- list(...)
   train_args[["trControl"]] <- trControl
   train_args[["metric"]] <- metric
-  train_args[["y"]] <- target
   train_args[["method"]] <- method
+
 
   model_list <- lapply(
     data_list,
     function(data) {
+
+      if (is.null(identifier_column_name)) {
+        train_args[["y"]] <- target
+      } else {
+        train_args[["y"]] <- .match_identifiers(target, data, identifier_column_name)
+      }
+
       .caret_train(
         train_args = train_args,
         data = data,
-        continue_on_fail = FALSE,
-        trim = TRUE,
-        aggregate_resamples = TRUE
+        continue_on_fail = continue_on_fail,
+        trim = trim,
+        aggregate_resamples = aggregate_resamples
       )
     }
   )
@@ -223,7 +257,11 @@ plot.caret_list <- function (caret_list, metric = NULL) {
       NULL
     })
   } else {
-    model <- do.call(caret::train, train_args)
+    model <- tryCatch({
+      do.call(caret::train, train_args)
+    }, error = function(e) {
+      stop("A model failed to train")
+    })
   }
 
   if ("pred" %in% names(model)) {
@@ -254,8 +292,24 @@ plot.caret_list <- function (caret_list, metric = NULL) {
 }
 
 
+#' @title Matches the identifiers of a target column with the rows of a data set
+#' @param target The target data table (two columns: one for the variable to train on one for identifier)
+#' @param data A data set to use for model training that contains an identifier column.
+#' @param identifier_column_name The name of the identifier column
+#' @return A vector of target variables to train on
+#' @noRd
+.match_identifiers <- function(
+    target,
+    data,
+    identifier_column_name
+){
+  data <- data.table::as.data.table(data)
+  target <- data.table::as.data.table(target)
 
-
-
+  target <- target[get(identifier_column_name) %in% data[[identifier_column_name]]]
+  target <- target[match(data[[identifier_column_name]], target[[identifier_column_name]])]
+  target <- target[[setdiff(colnames(target), identifier_column_name)]]
+  target
+}
 
 

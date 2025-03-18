@@ -160,3 +160,25 @@ testthat::test_that("caret_train wrapper", {
   testthat::expect_true("trainingData" %in% names(untrimmed_model))
 
 })
+
+
+testthat::test_that(".match_identifiers", {
+
+  target <- data.table::data.table(
+    Identifier = c(1,2,3,4,5),
+    Targ = c("A", "B", "C", "D", "E")
+  )
+
+  data1 <- data.table::data.table(
+    Identifier = c(1,2,3)
+  )
+
+  data2 <- data.table::data.table(
+    Identifier = c(3,2,5)
+  )
+
+  testthat::expect_equal(.match_identifiers(target, data1, "Identifier"), c("A","B","C"))
+  testthat::expect_equal(.match_identifiers(target, data2, "Identifier"), c("C","B","E"))
+
+  testthat::expect_true(is.character(.match_identifiers(target, data1, "Identifier")))
+})

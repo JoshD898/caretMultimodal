@@ -188,7 +188,9 @@ plot.caret_stack <- function(caret_stack, metric = NULL) {
     ggplot2::theme_bw() +
     ggplot2::labs(x = "Model", y = "Relative Importance (%)")
 
-  list(metric_plot, importance_plot)
+  out <- patchwork::wrap_plots(metric_plot, importance_plot, ncol = 1)
+
+  out
 
 }
 

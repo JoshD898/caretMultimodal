@@ -19,7 +19,7 @@ caret_list(
 \arguments{
 \item{target}{Target parameter vector, either numeric for regression or a factor/character for classification.}
 
-\item{data_list}{The data sets to train models on}
+\item{data_list}{A list of data sets to train models on}
 
 \item{method}{The method to train the models with. Can be a custom method or one found in \code{caret::modelLookup()}.}
 
