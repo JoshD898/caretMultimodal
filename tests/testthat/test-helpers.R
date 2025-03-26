@@ -47,27 +47,27 @@ testthat::test_that(".caret_predict", {
   numeric_new_data <- numeric_table[1:5, ]
   numeric_pred <- .caret_predict(numeric_model, new_data = numeric_new_data)
 
-  expect_equal(ncol(numeric_pred), 1L)
-  expect_equal(nrow(numeric_pred), 5L)
-  expect_equal(names(numeric_pred), "pred")
-  expect_true(is.numeric(numeric_pred$pred))
+  testthat::expect_equal(ncol(numeric_pred), 1L)
+  testthat::expect_equal(nrow(numeric_pred), 5L)
+  testthat::expect_equal(names(numeric_pred), "pred")
+  testthat::expect_true(is.numeric(numeric_pred$pred))
 
   factor_new_data <- numeric_table[1:5, ]
   factor_pred_no_exclude <- .caret_predict(factor_model, new_data = factor_new_data, excluded_class_id = 0L)
   factor_pred_with_exclude <- .caret_predict(factor_model, new_data = factor_new_data, excluded_class_id = 1L)
 
-  expect_equal(ncol(factor_pred_no_exclude), 2L)
-  expect_equal(nrow(factor_pred_no_exclude), 5L)
-  expect_equal(names(factor_pred_no_exclude), c("Type1", "Type2"))
-  expect_true(is.numeric(factor_pred_no_exclude$Type1))
-  expect_true(is.numeric(factor_pred_no_exclude$Type2))
+  testthat::expect_equal(ncol(factor_pred_no_exclude), 2L)
+  testthat::expect_equal(nrow(factor_pred_no_exclude), 5L)
+  testthat::expect_equal(names(factor_pred_no_exclude), c("Type1", "Type2"))
+  testthat::expect_true(is.numeric(factor_pred_no_exclude$Type1))
+  testthat::expect_true(is.numeric(factor_pred_no_exclude$Type2))
 
-  expect_equal(ncol(factor_pred_with_exclude), 1L)
-  expect_equal(nrow(factor_pred_with_exclude), 5L)
-  expect_equal(names(factor_pred_with_exclude), "Type2")
-  expect_true(is.numeric(factor_pred_with_exclude$Type2))
+  testthat::expect_equal(ncol(factor_pred_with_exclude), 1L)
+  testthat::expect_equal(nrow(factor_pred_with_exclude), 5L)
+  testthat::expect_equal(names(factor_pred_with_exclude), "Type2")
+  testthat::expect_true(is.numeric(factor_pred_with_exclude$Type2))
 
-  expect_silent(nnet_pred <- .caret_predict(nnet, new_data = numeric_table))
+  testthat::expect_silent(nnet_pred <- .caret_predict(nnet, new_data = numeric_table))
 })
 
 # Test validating models -------------------------------------------------------

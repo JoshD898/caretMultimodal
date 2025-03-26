@@ -34,9 +34,10 @@
       new_data <- as.matrix(new_data)
     }
     if (is_class) {
-      pred <- stats::predict(model, type = "prob", newdata = new_data, ...)
+      pred <- caret::predict.train(model, type = "prob", newdata = new_data, ...)
+
     } else {
-      pred <- stats::predict(model, type = "raw", newdata = new_data, ...)
+      pred <- caret::predict.train(model, type = "raw", newdata = new_data, ...)
 
       pred <- as.vector(pred)
 

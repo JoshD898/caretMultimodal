@@ -52,17 +52,23 @@ caret_stack <- function(
     individual_metric = .default_metric(target) # Default metric from making caret_list
 
     if (individual_metric == "ROC") {
-      auc <- pROC::roc(target~preds, direction = "<")$auc
-      data.table::data.table(model = model_name, ROC = auc)
+      auc_result <- pROC::roc(target ~ preds, direction = "<")
+      auc <- auc_result$auc
+      auc_ci <- pROC::ci(auc_result)
+      auc_sd <- (auc_ci[2] - auc_ci[1]) / 2
+      data.table::data.table(model = model_name, method = caret_list[[1]]$method, metric = "ROC", value = auc, sd = auc_sd)
 
     } else if (individual_metric == "Accuracy") {
       cm <- caret::confusionMatrix(preds, factor(target, levels = levels(preds)))
       acc <- cm$overall["Accuracy"]
-      data.table::data.table(model = model_name, Accuracy = acc)
+      acc_sd <- cm$byClass["AccuracySD"]
+      data.table::data.table(model = model_name, method = caret_list[[1]]$method, metric = "Accuracy", value = acc, sd = acc_sd)
 
     } else if (individual_metric == "RMSE") {
       res <- caret::postResample(preds, target)
-      data.table::data.table(model = model_name, RMSE = res[1])
+      rmse <- res[1]
+      rmse_sd <- res[2]
+      data.table::data.table(model = model_name, method = caret_list[[1]]$method, metric = "RMSE", value = rmse, sd = rmse_sd)
     }
   })
 
@@ -174,12 +180,12 @@ print.summary.caret_stack <- function(summary) {
 #' @export
 extract_metric.caret_stack <- function(caret_stack, metric= NULL) {
   ensemble_metrics <- .extract_train_metric(caret_stack$ensemble_model, metric)
-  individual_metrics <- extract_metric.caret_list(caret_stack$individual_models, metric)
+  individual_metrics <- caret_stack$individual_metrics
 
   data.table::set(ensemble_metrics, j = "model", value = "ensemble")
   data.table::setcolorder(ensemble_metrics, c("model", setdiff(names(ensemble_metrics), "model")))
 
-  all_metrics <- rbind(ensemble_metrics, individual_metrics)
+  all_metrics <- rbind(ensemble_metrics, individual_metrics, ignore.attr = TRUE)
   all_metrics
 }
 
