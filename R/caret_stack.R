@@ -52,9 +52,9 @@ caret_stack <- function(
     individual_metric = .default_metric(target) # Default metric from making caret_list
 
     if (individual_metric == "ROC") {
-      auc_result <- pROC::roc(target ~ preds, direction = "<")
-      auc <- auc_result$auc
-      auc_ci <- pROC::ci(auc_result)
+      roc <- pROC::roc(target ~ preds, quiet = TRUE)
+      auc <- roc$auc
+      auc_ci <- pROC::ci(roc)
       auc_sd <- (auc_ci[2] - auc_ci[1]) / 2
       data.table::data.table(model = model_name, method = caret_list[[1]]$method, metric = "ROC", value = auc, sd = auc_sd)
 
@@ -85,6 +85,7 @@ caret_stack <- function(
     individual_models = caret_list,
     individual_metrics = caret_list_metrics,
     training_data = data_list,
+    training_target = target,
     ensemble_model = ensemble_model,
     error = ensemble_model$results,
     excluded_class_id = excluded_class_id
@@ -168,7 +169,7 @@ print.summary.caret_stack <- function(summary) {
   cat("The following models were ensembled:", summary$models, " \n")
   cat("\nRelative importance:\n")
   print(summary$imp)
-  cat("\nModel accuracy:\n")
+  cat("\nModel metrics (based on caret_stack training data):\n")
   print(summary$results)
 }
 
@@ -189,9 +190,8 @@ extract_metric.caret_stack <- function(caret_stack, metric= NULL) {
   all_metrics
 }
 
-#' @title Plot metrics of a `caret_stack` object
+#' @title Plot various metrics of a `caret_stack` object
 #'
-#' @description TODO
 #'
 #' @return A `ggplot2` object
 #' @export
@@ -214,7 +214,7 @@ plot.caret_stack <- function(caret_stack, metric = NULL) {
   ) +
     ggplot2::geom_pointrange() +
     ggplot2::theme_bw() +
-    ggplot2::labs(x = "Model", y = "Metric Value")
+    ggplot2::labs(title = "Model Metrics", x = "", y = "Metric Value")
 
   imp <- summary$imp
   importance_plot <- ggplot2::ggplot(
@@ -226,12 +226,78 @@ plot.caret_stack <- function(caret_stack, metric = NULL) {
   ) +
     ggplot2::geom_bar(stat = "identity", fill = "skyblue") +
     ggplot2::theme_bw() +
-    ggplot2::labs(x = "Model", y = "Relative Importance (%)")
+    ggplot2::labs(title = "Relative Importance of Individual Models", x = "", y = "Relative Importance (%)")
 
-  out <- patchwork::wrap_plots(metric_plot, importance_plot, ncol = 1)
+  if (caret_stack$ensemble_model$metric == "ROC") {
+    out <- patchwork::wrap_plots(metric_plot, importance_plot, .plot_roc(caret_stack), ncol = 1)
+  } else {
+    out <- patchwork::wrap_plots(metric_plot, importance_plot, ncol = 1)
+  }
 
   out
 
+}
+
+# Helper functions -------------------------------------------------------------
+
+
+#' @title Plot ROC curves for individual and ensemble models in a caret_stack
+#' @param caret_stack The caret_stack to plot
+#' @return A `ggplot2` object
+#' @noRD
+.plot_roc <- function(caret_stack) {
+
+  predictions <- predict.caret_list(
+    caret_stack$individual_models,
+    new_data_list = caret_stack$training_data,
+    excluded_class_id = caret_stack$excluded_class_id,
+    aggregate_resamples = FALSE
+  )
+
+  target <- caret_stack$training_target
+
+  get_roc_data <- function(model_name, preds) {
+    roc <- pROC::roc(target ~ preds, quiet = TRUE)
+    tpr <- roc$sensitivities
+    fpr <- 1 - roc$specificities
+
+    roc_data <- data.frame(
+      FPR = fpr,
+      TPR = tpr,
+      Model = model_name
+    )
+
+    roc_data_grouped <- dplyr::summarise(
+      dplyr::group_by(roc_data, FPR),
+      mean_TPR = mean(TPR),
+      .groups = 'drop'
+    )
+
+    roc_data_grouped$Model <- model_name
+    roc_data_grouped
+  }
+
+    roc_data_list <- lapply(names(predictions), function(model_name) {
+    preds <- predictions[[model_name]]
+    get_roc_data(model_name, preds)
+  })
+
+  ensemble_preds <- predict(caret_stack)[[1]]
+  ensemble_roc_data <- get_roc_data("ensemble", ensemble_preds)
+
+  roc_data <- do.call(rbind, roc_data_list)
+  roc_data <- rbind(ensemble_roc_data, roc_data)
+
+  roc_data$Model <- factor(roc_data$Model, levels = c("ensemble", names(predictions)))
+
+  ggplot(roc_data, aes(x = FPR, y = mean_TPR, color = Model, linetype = Model)) +
+    geom_line(size = 1) +
+    geom_abline(slope = 1, intercept = 0, linetype = "dotted") +
+    labs(title = "ROC Curves",
+         x = "False Positive Rate (FPR)",
+         y = "True Positive Rate (TPR)") +
+    theme_bw() +
+    scale_linetype_manual(values = c("solid", "dashed", "dotdash", "twodash", "solid"))
 }
 
 
