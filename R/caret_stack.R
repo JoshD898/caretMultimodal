@@ -1,10 +1,10 @@
 #' @title Ensemble the models of a `caret_list` object
 #' @description Stack several `caret::train` models from a `caret_list` object using a `caret::train` model.
 #' @param caret_list a `caret_list` object
+#' @param data_list A list of datasets to predict on, with each dataset matching the corresponding model in `caret_list`.
+#' @param target Target parameter vector.
 #' @param method The method to train the ensemble model. Can be a custom method or one found in `caret::modelLookup()`.
-#' @param target Target parameter vector. Defaults to `NULL`, in which case the training data from the first model is `caret_list` will be used.
-#' @param new_data_list A list of datasets to predict on, with each dataset matching the corresponding model in `caret_list`. Defaults to `NULL`, in which case the training data for each model is used.
-#' @param metric Metric for use with `caret::train` function. A default metric will be constructed depending on the target type.
+#' @param metric Metric for use with `caret::train` function. If `NULL`, default metric will be constructed depending on the target type.
 #' @param trControl Control for use with the `caret::train` function. A default control will be constructed depending on the target type.
 #' @param excluded_class_id An integer indicating the class to exclude from predictions. If 0L, no class is excluded. Default is 1L.
 #' @param aggregate_resamples Boolean, whether to aggregate resamples by keys. Default is `TRUE`.
@@ -12,9 +12,9 @@
 #' @export
 caret_stack <- function(
     caret_list,
+    data_list,
+    target,
     method,
-    target = NULL,
-    new_data_list = NULL,
     metric = NULL,
     trControl = NULL,
     excluded_class_id = 1L,
@@ -23,34 +23,62 @@ caret_stack <- function(
 
   stopifnot(inherits(caret_list, "caret_list"))
 
-  if (is.null(target) != is.null(new_data_list)) {
-    stop("target and data_list must both be NULL, or neither", call. = FALSE)
+  if (length(unique(target)) == 1) {
+    stop("Target vector must contain two or more classes.")
+  }
+
+
+  for (i in seq_along(data_list)) {
+    if (nrow(data_list[[i]]) != length(target)) {
+      stop("The number of rows of data_list[[", i, "]] does not match the length of the target vector.")
+    }
   }
 
   .check_method(method)
 
   predictions <- predict.caret_list(
     caret_list,
-    new_data_list = new_data_list,
+    new_data_list = data_list,
     excluded_class_id = excluded_class_id,
     aggregate_resamples = aggregate_resamples
   )
 
-  obs <- target
-  if (is.null(obs)) {
-    obs <- data.table::data.table(caret_list[[1L]]$pred)
-    data.table::setorderv(obs, "rowIndex")
-    obs <- obs[, list(obs = obs[1L]), by = "rowIndex"]
-    obs <- obs[["obs"]]
-  }
+  metric <- if (is.null(metric)) .default_metric(target) else metric
+  trControl <- if (is.null(trControl)) .default_control(target) else trControl
 
-  trControl <- if (is.null(trControl)) .default_control(obs) else trControl
-  metric <- if (is.null(metric)) .default_metric(obs) else metric
 
-  ensemble_model <- caret::train(predictions, obs, method=method, metric = metric, trControl = trControl)
+  caret_list_metrics <- lapply(names(predictions), function(model_name) {
+    preds <- predictions[[model_name]]
+    individual_metric = .default_metric(target) # Default metric from making caret_list
+
+    if (individual_metric == "ROC") {
+      auc <- pROC::roc(target~preds, direction = "<")$auc
+      data.table::data.table(model = model_name, ROC = auc)
+
+    } else if (individual_metric == "Accuracy") {
+      cm <- caret::confusionMatrix(preds, factor(target, levels = levels(preds)))
+      acc <- cm$overall["Accuracy"]
+      data.table::data.table(model = model_name, Accuracy = acc)
+
+    } else if (individual_metric == "RMSE") {
+      res <- caret::postResample(preds, target)
+      data.table::data.table(model = model_name, RMSE = res[1])
+    }
+  })
+
+  caret_list_metrics <- data.table::rbindlist(caret_list_metrics, use.names = TRUE, fill = TRUE)
+
+
+  ensemble_model <- caret::train(x = predictions,
+                                 y = target,
+                                 method=method,
+                                 metric = metric,
+                                 trControl = trControl)
 
   caret_stack <- list(
     individual_models = caret_list,
+    individual_metrics = caret_list_metrics,
+    training_data = data_list,
     ensemble_model = ensemble_model,
     error = ensemble_model$results,
     excluded_class_id = excluded_class_id
@@ -139,7 +167,10 @@ print.summary.caret_stack <- function(summary) {
 }
 
 #' @title Extract metrics from a `caret_stack` object
-#' @return A `data.table::data.table` of metrics of the individual and emsembled model
+#'
+#' @description Produce metrics for how the caret_list models and emsemble model perform on the training data for the caret stack
+#'
+#' @return A `data.table::data.table` of metrics
 #' @export
 extract_metric.caret_stack <- function(caret_stack, metric= NULL) {
   ensemble_metrics <- .extract_train_metric(caret_stack$ensemble_model, metric)
@@ -153,6 +184,9 @@ extract_metric.caret_stack <- function(caret_stack, metric= NULL) {
 }
 
 #' @title Plot metrics of a `caret_stack` object
+#'
+#' @description TODO
+#'
 #' @return A `ggplot2` object
 #' @export
 plot.caret_stack <- function(caret_stack, metric = NULL) {

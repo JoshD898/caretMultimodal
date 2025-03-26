@@ -35,7 +35,6 @@
     }
     if (is_class) {
       pred <- stats::predict(model, type = "prob", newdata = new_data, ...)
-      stopifnot(is.data.frame(pred))
     } else {
       pred <- stats::predict(model, type = "raw", newdata = new_data, ...)
 
