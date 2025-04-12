@@ -110,7 +110,7 @@ testthat::test_that(".validate_excluded_class", {
   testthat::expect_error(.validate_excluded_class(c(1L, 2L)), "classification excluded level must have a length of 1")
   testthat::expect_error(.validate_excluded_class(NA), "classification excluded level must be numeric: NA")
   testthat::expect_error(.validate_excluded_class(-1L), "classification excluded level must be >= 0")
-  testthat::expect_error(.validate_excluded_class(Inf), "classification excluded level must be finite: Inf")
+  suppressWarnings(testthat::expect_error(.validate_excluded_class(Inf), "classification excluded level must be finite: Inf"))
 
   testthat::expect_warning(test <- .validate_excluded_class(3.5), "classification excluded level is not an integer")
   testthat::expect_equal(test, 3L)

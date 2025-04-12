@@ -42,19 +42,17 @@ factor_model <- suppressWarnings(caret::train(x = numeric_table, y = binary_fact
 
 named_models <- caret_list(target = numeric_vector, data_list = named_data_list, method = "rf")
 
-stack <- caret_stack(named_models, method = "glm")
+stack <- caret_stack(named_models, method = "glm", target = numeric_vector, data_list = named_data_list)
 
 # Constructor tests ------------------------------------------------------------
 
 testthat::test_that("caret_stack", {
-  testthat::expect_error(caret_stack(named_models, target = numeric_vector),
-                         "target and data_list must both be NULL, or neither")
 
   testthat::expect_true(inherits(stack, "caret_stack"))
 
-  testthat::expect_silent(stack_with_new_data <- caret_stack(named_models, method = "glm", target = numeric_vector, new_data_list = named_data_list))
+  testthat::expect_silent(stack_with_new_data <- caret_stack(named_models, method = "glm", target = numeric_vector, data_list = named_data_list))
 
-  testthat::expect_error(stack_bad_new_data <- caret_stack(named_models, method = "glm", target = numeric_vector, new_data_list = list(factor_table, factor_table, factor_table)))
+  testthat::expect_error(stack_bad_new_data <- caret_stack(named_models, method = "glm", target = numeric_vector, data_list = list(factor_table, factor_table, factor_table)))
 })
 
 # Method tests -----------------------------------------------------------------
