@@ -28,7 +28,7 @@ caret_list <- function(
     ...) {
 
   if (is.null(identifier_column_name)) {
-    if (!is.vector(target)) {
+    if (!(is.vector(target) || is.factor(target))) {
       stop("Target must be a vector when no identifier column name is provided.")
     }
 

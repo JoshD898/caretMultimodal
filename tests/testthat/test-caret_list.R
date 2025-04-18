@@ -1,4 +1,5 @@
 # Setup ------------------------------------------------------------------------
+library(testthat)
 set.seed(192L)
 
 numeric_vector <- runif(30)
@@ -46,32 +47,54 @@ unnamed_models <- caret_list(target = numeric_vector, data_list = unnamed_data_l
 
 # Constructor tests ------------------------------------------------------------
 
-testthat::test_that("caret_list", {
+test_that("caret_list", {
+  expect_equal(names(named_models), c("numeric_model", "factor_model", "mixed_model"))
+  expect_equal(names(unnamed_models), c("data_list[[1]]_model", "data_list[[2]]_model", "data_list[[3]]_model"))
+  expect_true(inherits(named_models, "caret_list"))
+})
 
-  testthat::expect_error(caret_list(target = numeric_vector, data_list = list(head(numeric_table, 29)), method = "glm"),
-               "The number of rows of data_list\\[\\[1\\]\\] does not match the length of the target vector.")
+test_that("caret_list invlid inputs", {
 
-  testthat::expect_equal(names(named_models), c("numeric_model", "factor_model", "mixed_model"))
-  testthat::expect_equal(names(unnamed_models), c("data_list[[1]]_model", "data_list[[2]]_model", "data_list[[3]]_model"))
-  testthat::expect_true(inherits(named_models, "caret_list"))
+  indexed_target <- data.frame(value = numeric_vector)
+  indexed_target$index <- seq_len(nrow(indexed_target))
 
+  indexed_numeric_table <- numeric_table
+  indexed_numeric_table$index <- seq_len(nrow(indexed_numeric_table))
 
+  expect_error(caret_list(target = numeric_vector, data_list = list(head(numeric_table, 29)), method = "glm"),
+                         "The number of rows of data_list\\[\\[1\\]\\] does not match the length of the target vector.")
+
+  expect_error(caret_list(target = indexed_target, data_list = list(numeric_table), method = "glm"),
+                         "Target must be a vector when no identifier column name is provided.")
+
+  expect_error(caret_list(target = indexed_target, data_list = list(numeric_table), method = "glm", identifier_column_name = "index"),
+                         "The identifier column 'index' is missing in data_list\\[\\[1\\]\\].")
+
+  expect_error(caret_list(target = numeric_vector, data_list = list(indexed_numeric_table), method = "glm", identifier_column_name = "index"),
+                         "The identifier column 'index' is missing in the target dataframe.")
+
+  expect_no_error(caret_list(target = indexed_target, data_list = list(indexed_numeric_table), method = "glm", identifier_column_name = "index"))
+
+  indexed_target$extra_column <- seq_len(nrow(indexed_target))
+
+  expect_error(caret_list(target = indexed_target, data_list = list(indexed_numeric_table), method = "glm", identifier_column_name = "index"),
+                         "Target must have exactly two columns: one serving as an identifier and the other containing values for training.")
 })
 
 # Method tests -----------------------------------------------------------------
 
-testthat::test_that("predict.caret_list", {
-  testthat::expect_error(predict(named_models, new_data_list = list(mixed_table)),
+test_that("predict.caret_list", {
+  expect_error(predict(named_models, new_data_list = list(mixed_table)),
                "The length of new_data_list must be the same length as caret_list")
 
-  testthat::expect_error(predict(named_models, new_data_list = list(mixed_table, head(factor_table, 29), numeric_table)),
+  expect_error(predict(named_models, new_data_list = list(mixed_table, head(factor_table, 29), numeric_table)),
                "All matrices in new_data_list must have the same number of rows")
 
   preds <- predict(named_models)
 
-  testthat::expect_true(inherits(preds, "data.table"))
-  testthat::expect_equal(nrow(preds), 30)
-  testthat::expect_equal(ncol(preds), 3)
+  expect_true(inherits(preds, "data.table"))
+  expect_equal(nrow(preds), 30)
+  expect_equal(ncol(preds), 3)
 
   new_numeric_table <- data.table::data.table(
     Var1 = runif(30),
@@ -99,53 +122,53 @@ testthat::test_that("predict.caret_list", {
 
   new_preds <- predict(named_models, new_data_list = list(new_numeric_table, new_factor_table, new_mixed_table))
 
-  testthat::expect_equal(ncol(new_preds), 3)
-  testthat::expect_equal(nrow(new_preds), 30)
+  expect_equal(ncol(new_preds), 3)
+  expect_equal(nrow(new_preds), 30)
 })
 
-testthat::test_that("predict.caret_list", {
-  testthat::expect_error(predict(named_models, new_data_list = list(mixed_table)),
+test_that("predict.caret_list", {
+  expect_error(predict(named_models, new_data_list = list(mixed_table)),
                          "The length of new_data_list must be the same length as caret_list")
 
-  testthat::expect_error(predict(named_models, new_data_list = list(mixed_table, head(factor_table, 29), numeric_table)),
+  expect_error(predict(named_models, new_data_list = list(mixed_table, head(factor_table, 29), numeric_table)),
                          "All matrices in new_data_list must have the same number of rows")
 
   preds <- predict(named_models)
 
-  testthat::expect_true(inherits(preds, "data.table"))
+  expect_true(inherits(preds, "data.table"))
 
-  testthat::expect_equal(nrow(preds), 30)
+  expect_equal(nrow(preds), 30)
 })
 
-testthat::test_that("extract_metric, summary and print methods", {
+test_that("extract_metric, summary and print methods", {
   metrics <- extract_metric(named_models)
-  testthat::expect_equal(nrow(metrics), 3)
-  testthat::expect_equal(colnames(metrics), c("model", "method", "metric", "value", "sd"))
+  expect_equal(nrow(metrics), 3)
+  expect_equal(colnames(metrics), c("model", "method", "metric", "value", "sd"))
 })
 
-testthat::test_that("print.summary.caret_list", {
+test_that("print.summary.caret_list", {
   summary <- summary(named_models)
-  testthat::expect_true(inherits(summary, "summary.caret_list"))
-  testthat::expect_output(print(summary))
+  expect_true(inherits(summary, "summary.caret_list"))
+  expect_output(print(summary))
 })
 
-testthat::test_that("plot.caret_list", {
-  testthat::expect_silent(plt <- plot(named_models))
-  testthat::expect_true(inherits(plt, "ggplot"))
+test_that("plot.caret_list", {
+  expect_silent(plt <- plot(named_models))
+  expect_true(inherits(plt, "ggplot"))
 })
 
 # Helper function tests --------------------------------------------------------
 
-testthat::test_that("caret_train wrapper", {
+test_that("caret_train wrapper", {
 
   bad_args <- list(method = "NOT_A_METHOD",
                      trControl = .default_control(numeric_vector),
                      y = numeric_vector,
                      metric = .default_metric(numeric_vector))
 
-  testthat::expect_error(.caret_train(bad_args, mixed_table, continue_on_fail = FALSE))
-  testthat::expect_warning(model_fail <- .caret_train(bad_args, mixed_table, continue_on_fail = TRUE))
-  testthat::expect_null(model_fail)
+  expect_error(.caret_train(bad_args, mixed_table, continue_on_fail = FALSE))
+  expect_warning(model_fail <- .caret_train(bad_args, mixed_table, continue_on_fail = TRUE))
+  expect_null(model_fail)
 
   train_args <- list(method = "glm",
                      trControl = .default_control(numeric_vector),
@@ -154,15 +177,15 @@ testthat::test_that("caret_train wrapper", {
   untrimmed_model <- .caret_train(train_args, mixed_table, trim = FALSE)
   trimmed_model <- .caret_train(train_args, mixed_table, trim = TRUE)
 
-  testthat::expect_false("call" %in% names(trimmed_model))
-  testthat::expect_false("trainingData" %in% names(trimmed_model))
-  testthat::expect_true("call" %in% names(untrimmed_model))
-  testthat::expect_true("trainingData" %in% names(untrimmed_model))
+  expect_false("call" %in% names(trimmed_model))
+  expect_false("trainingData" %in% names(trimmed_model))
+  expect_true("call" %in% names(untrimmed_model))
+  expect_true("trainingData" %in% names(untrimmed_model))
 
 })
 
 
-testthat::test_that(".match_identifiers", {
+test_that(".match_identifiers", {
 
   target <- data.table::data.table(
     Identifier = c(1,2,3,4,5),
@@ -177,8 +200,8 @@ testthat::test_that(".match_identifiers", {
     Identifier = c(3,2,5)
   )
 
-  testthat::expect_equal(.match_identifiers(target, data1, "Identifier"), c("A","B","C"))
-  testthat::expect_equal(.match_identifiers(target, data2, "Identifier"), c("C","B","E"))
+  expect_equal(.match_identifiers(target, data1, "Identifier"), c("A","B","C"))
+  expect_equal(.match_identifiers(target, data2, "Identifier"), c("C","B","E"))
 
-  testthat::expect_true(is.character(.match_identifiers(target, data1, "Identifier")))
+  expect_true(is.character(.match_identifiers(target, data1, "Identifier")))
 })

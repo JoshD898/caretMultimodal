@@ -1,4 +1,5 @@
 # Setup ------------------------------------------------------------------------
+library(testthat)
 set.seed(192L)
 
 numeric_vector <- runif(30)
@@ -40,55 +41,65 @@ named_data_list = list(numeric = numeric_table,
 numeric_model <- suppressWarnings(caret::train(x = numeric_table, y = numeric_vector, method = "rf", trControl = .default_control(numeric_vector)))
 factor_model <- suppressWarnings(caret::train(x = numeric_table, y = binary_factor_vector, method = "glm", trControl = .default_control(binary_factor_vector)))
 
-named_models <- caret_list(target = numeric_vector, data_list = named_data_list, method = "rf")
+named_models <- suppressWarnings(caret_list(target = binary_factor_vector, data_list = named_data_list, method = "rf"))
 
-stack <- caret_stack(named_models, method = "glm", target = numeric_vector, data_list = named_data_list)
+stack <- suppressWarnings(caret_stack(named_models, method = "glm", target = binary_factor_vector, data_list = named_data_list))
 
 # Constructor tests ------------------------------------------------------------
 
-testthat::test_that("caret_stack", {
+test_that("caret_stack", {
+  expect_true(inherits(stack, "caret_stack"))
+  expect_silent(stack_with_new_data <- caret_stack(named_models, method = "glm", target = numeric_vector, data_list = named_data_list))
+  expect_error(stack_bad_new_data <- caret_stack(named_models, method = "glm", target = numeric_vector, data_list = list(factor_table, factor_table, factor_table)))
+})
 
-  testthat::expect_true(inherits(stack, "caret_stack"))
+test_that("caret_stack invalid input", {
+  expect_error(caret_stack(named_models, method = "glm", target = rep("Yes", 30), data_list = named_data_list),
+                            "Target vector must contain two or more classes.")
 
-  testthat::expect_silent(stack_with_new_data <- caret_stack(named_models, method = "glm", target = numeric_vector, data_list = named_data_list))
-
-  testthat::expect_error(stack_bad_new_data <- caret_stack(named_models, method = "glm", target = numeric_vector, data_list = list(factor_table, factor_table, factor_table)))
+  expect_error(caret_stack(named_models, method = "glm", target = binary_factor_vector[10:20], data_list = named_data_list),
+               "The number of rows of data_list\\[\\[1\\]\\] does not match the length of the target vector.")
 })
 
 # Method tests -----------------------------------------------------------------
 
-testthat::test_that("predict.caret_stack", {
+test_that("predict.caret_stack", {
   pred <- predict(stack)
   pred_new_data <- predict(stack, new_data_list = list(numeric_table[1:5, ], factor_table[1:5,], mixed_table[1:5,]))
 
-  testthat::expect_equal(ncol(pred), 1)
-  testthat::expect_equal(nrow(pred), 30)
+  expect_equal(ncol(pred), 1)
+  expect_equal(nrow(pred), 30)
 
-  testthat::expect_equal(ncol(pred_new_data), 1)
-  testthat::expect_equal(nrow(pred_new_data), 5)
+  expect_equal(ncol(pred_new_data), 1)
+  expect_equal(nrow(pred_new_data), 5)
 })
 
-testthat::test_that("summary.caret_stack", {
+test_that("summary.caret_stack", {
   summary <- summary(stack)
 
-  testthat::expect_equal(names(summary), c("models", "imp", "metric", "results"))
-  testthat::expect_true(inherits(summary, "summary.caret_stack"))
-  testthat::expect_equal(sum(summary$imp$Overall), 100)
+  expect_equal(names(summary), c("models", "imp", "metric", "results"))
+  expect_true(inherits(summary, "summary.caret_stack"))
+  expect_equal(sum(summary$imp$Overall), 100)
 })
 
-testthat::test_that("print, print.summary", {
-  testthat::expect_output(print(stack))
-  testthat::expect_output(print(summary(stack)))
+test_that("print, print.summary", {
+  expect_output(print(stack))
+  expect_output(print(summary(stack)))
 })
 
-testthat::test_that("extract_metric.caret_stack", {
+test_that("extract_metric.caret_stack", {
   metric <- extract_metric(stack)
 
-  testthat::expect_equal(nrow(metric), 4)
-  testthat::expect_equal(colnames(metric), c("model", "method", "metric", "value", "sd"))
+  expect_equal(nrow(metric), 4)
+  expect_equal(colnames(metric), c("model", "method", "metric", "value", "sd"))
 })
 
-testthat::test_that("plot.caret_stack", {
-  testthat::expect_silent(plt <- plot(stack))
-  testthat::expect_true(inherits(plt, "ggplot"))
+test_that("plot.caret_stack", {
+  three_factor_models <- suppressWarnings(caret_list(target = three_factor_vector, data_list = named_data_list, method = "rf"))
+  three_factor_stack <- suppressWarnings(caret_stack(named_models, method = "rf", target = three_factor_vector, data_list = named_data_list))
+
+  suppressWarnings(plt <- plot(stack))
+  suppressWarnings(three_factor_plt <- plot(three_factor_stack))
+  expect_true(inherits(plt, "ggplot"))
+  expect_true(inherits(three_factor_plt, "ggplot"))
 })

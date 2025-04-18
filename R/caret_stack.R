@@ -59,7 +59,8 @@ caret_stack <- function(
       data.table::data.table(model = model_name, method = caret_list[[1]]$method, metric = "ROC", value = auc, sd = auc_sd)
 
     } else if (individual_metric == "Accuracy") {
-      cm <- caret::confusionMatrix(preds, factor(target, levels = levels(preds)))
+      common_levels <- union(levels(target), levels(preds))
+      cm <- caret::confusionMatrix(factor(preds, levels = common_levels), factor(target, levels = common_levels))
       acc <- cm$overall["Accuracy"]
       acc_sd <- cm$byClass["AccuracySD"]
       data.table::data.table(model = model_name, method = caret_list[[1]]$method, metric = "Accuracy", value = acc, sd = acc_sd)
