@@ -228,8 +228,8 @@ plot.caret_stack <- function(x, ...) {
   importance_plot <- ggplot2::ggplot(
     imp,
     ggplot2::aes(
-      x = reorder(rownames(imp), Overall),
-      y = Overall
+      x = stats::reorder(rownames(imp), imp$Overall),  # Explicitly reference Overall here
+      y = imp$Overall  # Explicitly reference Overall here
     )
   ) +
     ggplot2::geom_bar(stat = "identity", fill = "skyblue") +
@@ -243,18 +243,17 @@ plot.caret_stack <- function(x, ...) {
   }
 
   out
-
 }
 
 # Helper functions -------------------------------------------------------------
 
 
 #' @title Plot ROC curves for individual and ensemble models in a caret_stack
+#' @importFrom rlang .data
 #' @param caret_stack The caret_stack to plot
 #' @return A `ggplot2` object
 #' @noRd
 .plot_roc <- function(caret_stack) {
-
   predictions <- predict.caret_list(
     caret_stack$individual_models,
     new_data_list = caret_stack$training_data,
@@ -276,36 +275,33 @@ plot.caret_stack <- function(x, ...) {
     )
 
     roc_data_grouped <- dplyr::summarise(
-      dplyr::group_by(roc_data, FPR),
-      mean_TPR = mean(TPR),
-      .groups = 'drop'
+      dplyr::group_by(roc_data, .data$FPR),
+      mean_TPR = mean(.data$TPR),
+      .groups = "drop"
     )
 
     roc_data_grouped$Model <- model_name
     roc_data_grouped
   }
 
-    roc_data_list <- lapply(names(predictions), function(model_name) {
+  roc_data_list <- lapply(names(predictions), function(model_name) {
     preds <- predictions[[model_name]]
     get_roc_data(model_name, preds)
   })
 
-  ensemble_preds <- predict(caret_stack)[[1]]
+  ensemble_preds <- stats::predict(caret_stack)[[1]]
   ensemble_roc_data <- get_roc_data("ensemble", ensemble_preds)
 
   roc_data <- do.call(rbind, roc_data_list)
   roc_data <- rbind(ensemble_roc_data, roc_data)
-
   roc_data$Model <- factor(roc_data$Model, levels = c("ensemble", names(predictions)))
 
-  ggplot(roc_data, aes(x = FPR, y = mean_TPR, color = Model, linetype = Model)) +
-    geom_line(size = 1) +
-    geom_abline(slope = 1, intercept = 0, linetype = "dotted") +
-    labs(title = "ROC Curves",
-         x = "False Positive Rate (FPR)",
-         y = "True Positive Rate (TPR)") +
-    theme_bw() +
-    scale_linetype_manual(values = c("solid", "dashed", "dotdash", "twodash", "solid"))
+  ggplot2::ggplot(roc_data, ggplot2::aes(x = .data$FPR, y = .data$mean_TPR, color = .data$Model, linetype = .data$Model)) +
+    ggplot2::geom_line(size = 1) +
+    ggplot2::geom_abline(slope = 1, intercept = 0, linetype = "dotted") +
+    ggplot2::labs(title = "ROC Curves", x = "False Positive Rate (FPR)", y = "True Positive Rate (TPR)") +
+    ggplot2::theme_bw() +
+    ggplot2::scale_linetype_manual(values = c("solid", "dashed", "dotdash", "twodash", "solid"))
 }
 
 

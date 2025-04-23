@@ -169,7 +169,7 @@ extract_metric <- function(x, ...) UseMethod("extract_metric")
 extract_metric.caret_list <- function (x, ...) {
   metrics <- lapply(names(x), function(model_name) {
     df <- .extract_train_metric(x[[model_name]])
-    df[, model := model_name]
+    set(df, j = "model", value = model_name)
     return(df)
   })
   metrics <- data.table::rbindlist(metrics, use.names = TRUE, fill = TRUE)

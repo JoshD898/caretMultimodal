@@ -315,8 +315,11 @@
   out
 }
 
+# import data.table is necessary, if not included some data.table methods are not recognized
+
 #' @title Extract the best predictions from a `caret::train` object
 #' @description Extract the best predictions from a `caret::train` object.
+#' @import data.table
 #' @param model A `caret::train` object
 #' @param aggregate_resamples Logical, whether to aggregate resamples by keys. Default is TRUE.
 #' @return A `data.table::data.table` with predictions
