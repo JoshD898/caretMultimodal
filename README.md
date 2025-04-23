@@ -10,11 +10,8 @@ coverage](https://codecov.io/gh/JoshD898/caretMultimodal/graph/badge.svg)](https
 
 <!-- badges: end -->
 
-CaretMultimodal is a wrapper around the
-[caret](https://github.com/topepo/caret) package that allows for
-simplified multi-dataset training and ensembling. It is heavily inspired
-by Zach Mayer's
-[caretEnsemble](https://github.com/zachmayer/caretEnsemble) package.
+**caretMultimodal** is an R framework built on top of the [caret](https://github.com/topepo/caret) package, designed to streamline the integration of multiple datasets through heterogeneous ensembling. 
+It offers functionality similar to the [eipy](https://github.com/GauravPandeyLab/eipy) package in Python and draws significant inspiration from Zach Mayer's [caretEnsemble](https://github.com/zachmayer/caretEnsemble) package.
 
 ## Example Usage
 
