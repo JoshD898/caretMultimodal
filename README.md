@@ -1,3 +1,5 @@
+# caretMultimodal
+
 <!-- badges: start -->
 
 [![Codecov test
@@ -7,8 +9,6 @@ coverage](https://codecov.io/gh/JoshD898/caretMultimodal/graph/badge.svg)](https
 ![Code Size](https://img.shields.io/github/languages/code-size/joshD898/caretMultimodal)
 
 <!-- badges: end -->
-
-# caretMultimodal
 
 CaretMultimodal is a wrapper around the
 [caret](https://github.com/topepo/caret) package that allows for
