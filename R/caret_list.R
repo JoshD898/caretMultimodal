@@ -170,7 +170,7 @@ extract_metric.caret_list <- function (x, ...) {
   metrics <- lapply(names(x), function(model_name) {
     df <- .extract_train_metric(x[[model_name]])
     set(df, j = "model", value = model_name)
-    return(df)
+    df
   })
   metrics <- data.table::rbindlist(metrics, use.names = TRUE, fill = TRUE)
   metrics <- metrics[, c("model", setdiff(names(metrics), "model")), with = FALSE]
