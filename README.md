@@ -1,6 +1,7 @@
 <!-- badges: start -->
 [![Codecov test coverage](https://codecov.io/gh/JoshD898/caretMultimodal/graph/badge.svg)](https://app.codecov.io/gh/JoshD898/caretMultimodal)
 [![R-CMD-check](https://github.com/JoshD898/caretMultimodal/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/JoshD898/caretMultimodal/actions/workflows/R-CMD-check.yaml)
+[![CodeFactor](https://www.codefactor.io/repository/github/joshd898/caretmultimodal/badge)](https://www.codefactor.io/repository/github/joshd898/caretmultimodal)
 <!-- badges: end -->
 
 # caretMultimodal
