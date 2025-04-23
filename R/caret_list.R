@@ -112,6 +112,7 @@ caret_list <- function(
 #' @param verbose A boolean that controls the verbosity of error messages
 #' @param excluded_class_id An integer indicating the class to exclude from predictions. If 0L, no class is excluded. Default is 1L.
 #' @param aggregate_resamples A boolean that controls whether to aggregate resamples by keys. Default is `TRUE`.
+#' @param ... Additional arguments
 #' @return A `data.table::data.table` of predictions
 #' @export
 predict.caret_list <- function(
@@ -119,7 +120,8 @@ predict.caret_list <- function(
     new_data_list = NULL,
     verbose = FALSE,
     excluded_class_id = 1L,
-    aggregate_resamples = TRUE) {
+    aggregate_resamples = TRUE,
+    ...) {
 
   apply_fun <- if (verbose) pbapply::pblapply else lapply
 
@@ -161,13 +163,12 @@ extract_metric <- function(x, ...) UseMethod("extract_metric")
 #' @title Extract accuracy metrics from a `caret_list` object
 #' @description Extract the cross-validated accuracy metrics from each model in a `caret_list`.
 #' @param x a `caret_list` object
-#' @param metric a character string representing the metric to extract from each model.
-#' If NULL or if the provided metric is not found, default model metrics will be extracted
+#' @param ... Additional arguments
 #' @return A data.table with metrics from each model.
 #' @export
-extract_metric.caret_list <- function (caret_list, metric = NULL) {
-  metrics <- lapply(names(caret_list), function(model_name) {
-    df <- .extract_train_metric(caret_list[[model_name]], metric = metric)
+extract_metric.caret_list <- function (x, ...) {
+  metrics <- lapply(names(x), function(model_name) {
+    df <- .extract_train_metric(x[[model_name]])
     df[, model := model_name]
     return(df)
   })
@@ -178,36 +179,38 @@ extract_metric.caret_list <- function (caret_list, metric = NULL) {
 
 #' @title Summarize a caret_list
 #' @description This function summarizes the performance of each model in a caret_list object.
-#' @param caret_list a caret_list object
-#' @param metric The metric to show. If NULL will use the metric used to train each model
-#' @return A data.table with metrics from each model.
-#' @method summary caret_list
+#' @param object a `caret_list` object
+#' @param ... Additional arguments
+#' @return A `summary.caret_list` object
 #' @export
-summary.caret_list <- function(caret_list, metric = NULL) {
+summary.caret_list <- function(object, ...) {
   out <- list(
-    models = toString(names(caret_list)),
-    metrics = extract_metric(caret_list, metric = metric)
+    models = toString(names(object)),
+    metrics = extract_metric(object)
   )
   class(out) <- "summary.caret_list"
 
   out
 }
 
+#' @title Print a summary of a caret_list
+#' @param x A `summary.caret_list` object
+#' @param ... Additional arguments
 #' @export
-print.summary.caret_list <- function(summary) {
-  cat("The following models were trained:", summary[["models"]], "\n")
+print.summary.caret_list <- function(x, ...) {
+  cat("The following models were trained:", x[["models"]], "\n")
   cat("\nModel metrics:\n")
-  print(summary[["metrics"]])
+  print(x[["metrics"]])
 }
 
 #' @title Plot a `caret_list` object
 #' @description This function plots the performance of each model in a caret_list object.
 #' @param x a caret_list object
-#' @param metric which metric to plot
-#' @return A ggplot2 object
+#' @param ... Additional arguments
+#' @return A `ggplot` object
 #' @export
-plot.caret_list <- function (caret_list, metric = NULL) {
-  dat <- extract_metric(caret_list, metric = metric)
+plot.caret_list <- function (x, ...) {
+  dat <- extract_metric(x)
   plt <- ggplot2::ggplot(
     dat, ggplot2::aes(
       x = .data[["model"]],

@@ -4,13 +4,12 @@
 \alias{extract_metric.caret_list}
 \title{Extract accuracy metrics from a \code{caret_list} object}
 \usage{
-\method{extract_metric}{caret_list}(caret_list, metric = NULL)
+\method{extract_metric}{caret_list}(x, ...)
 }
 \arguments{
-\item{metric}{a character string representing the metric to extract from each model.
-If NULL or if the provided metric is not found, default model metrics will be extracted}
-
 \item{x}{a \code{caret_list} object}
+
+\item{...}{Additional arguments}
 }
 \value{
 A data.table with metrics from each model.

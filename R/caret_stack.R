@@ -138,51 +138,58 @@ predict.caret_stack <- function(
 }
 
 #' @title Print details of a `caret_stack` object.
+#' @param x A `caret_stack` object
+#' @param ... Additional arguments
 #' @export
-print.caret_stack <- function(caret_stack) {
-  cat("The following models were ensembled:", toString(names(caret_stack$individual_models)), " \n")
+print.caret_stack <- function(x, ...) {
+  cat("The following models were ensembled:", toString(names(x$individual_models)), " \n")
   cat("\ncaret::train model:\n")
-  print(caret_stack$ensemble_model)
+  print(x$ensemble_model)
   cat("\nFinal model:\n")
-  print(caret_stack$ensemble_model$finalModel)
+  print(x$ensemble_model$finalModel)
 }
 
 #' @title Get a summary of a `caret_stack` object
+#' @param object A `caret_stack` object
+#' @param ... Additional arguments
+#' @return A `summary.caret_stack` object
 #' @export
-summary.caret_stack <- function(caret_stack) {
-  metric <- caret_stack$ensemble_model$metric
-  imp <- caret::varImp(caret_stack$ensemble_model$finalModel, scale = TRUE)
+summary.caret_stack <- function(object, ...) {
+  metric <- object$ensemble_model$metric
+  imp <- caret::varImp(object$ensemble_model$finalModel, scale = TRUE)
   imp$Overall <- imp$Overall / sum(imp$Overall) * 100
 
   out <- list(
-    models = toString(names(caret_stack$individual_models)),
+    models = toString(names(object$individual_models)),
     imp = imp,
     metric = metric,
-    results = extract_metric(caret_stack, metric = metric)
+    results = extract_metric(object)
   )
   class(out) <- "summary.caret_stack"
   out
 }
 
 #' @title Print a summary of a `caret_stack` object
+#' @param x A `summary.caret_stack` object
+#' @param ... Additional arguments
 #' @export
-print.summary.caret_stack <- function(summary) {
-  cat("The following models were ensembled:", summary$models, " \n")
+print.summary.caret_stack <- function(x, ...) {
+  cat("The following models were ensembled:", x$models, " \n")
   cat("\nRelative importance:\n")
-  print(summary$imp)
+  print(x$imp)
   cat("\nModel metrics (based on caret_stack training data):\n")
-  print(summary$results)
+  print(x$results)
 }
 
 #' @title Extract metrics from a `caret_stack` object
-#'
-#' @description Produce metrics for how the caret_list models and emsemble model perform on the training data for the caret stack
-#'
+#' @description Produce metrics for how the caret_list models and ensemble model perform on the training data for the caret stack
+#' @param x A `caret_stack` object
+#' @param ... Additional arguments
 #' @return A `data.table::data.table` of metrics
 #' @export
-extract_metric.caret_stack <- function(caret_stack, metric= NULL) {
-  ensemble_metrics <- .extract_train_metric(caret_stack$ensemble_model, metric)
-  individual_metrics <- caret_stack$individual_metrics
+extract_metric.caret_stack <- function(x, ...) {
+  ensemble_metrics <- .extract_train_metric(x$ensemble_model)
+  individual_metrics <- x$individual_metrics
 
   data.table::set(ensemble_metrics, j = "model", value = "ensemble")
   data.table::setcolorder(ensemble_metrics, c("model", setdiff(names(ensemble_metrics), "model")))
@@ -192,13 +199,13 @@ extract_metric.caret_stack <- function(caret_stack, metric= NULL) {
 }
 
 #' @title Plot various metrics of a `caret_stack` object
-#'
-#'
-#' @return A `ggplot2` object
+#' @param x The `caret_stack` object to plot metrics for
+#' @param ... Additional arguments
+#' @return A `ggplot` object
 #' @export
-plot.caret_stack <- function(caret_stack, metric = NULL) {
-  dat <- extract_metric(caret_stack, metric = metric)
-  summary <- summary(caret_stack)
+plot.caret_stack <- function(x, ...) {
+  dat <- extract_metric(x)
+  summary <- summary(x)
 
   model_order <- unique(dat[["model"]])
   dat[["model"]] <- factor(dat[["model"]], levels = model_order)
@@ -229,8 +236,8 @@ plot.caret_stack <- function(caret_stack, metric = NULL) {
     ggplot2::theme_bw() +
     ggplot2::labs(title = "Relative Importance of Individual Models", x = "", y = "Relative Importance (%)")
 
-  if (caret_stack$ensemble_model$metric == "ROC") {
-    out <- patchwork::wrap_plots(metric_plot, importance_plot, .plot_roc(caret_stack), ncol = 1)
+  if (x$ensemble_model$metric == "ROC") {
+    out <- patchwork::wrap_plots(metric_plot, importance_plot, .plot_roc(x), ncol = 1)
   } else {
     out <- patchwork::wrap_plots(metric_plot, importance_plot, ncol = 1)
   }
@@ -245,7 +252,7 @@ plot.caret_stack <- function(caret_stack, metric = NULL) {
 #' @title Plot ROC curves for individual and ensemble models in a caret_stack
 #' @param caret_stack The caret_stack to plot
 #' @return A `ggplot2` object
-#' @noRD
+#' @noRd
 .plot_roc <- function(caret_stack) {
 
   predictions <- predict.caret_list(

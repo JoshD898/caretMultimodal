@@ -4,7 +4,12 @@
 \alias{print.caret_stack}
 \title{Print details of a \code{caret_stack} object.}
 \usage{
-\method{print}{caret_stack}(caret_stack)
+\method{print}{caret_stack}(x, ...)
+}
+\arguments{
+\item{x}{A \code{caret_stack} object}
+
+\item{...}{Additional arguments}
 }
 \description{
 Print details of a \code{caret_stack} object.

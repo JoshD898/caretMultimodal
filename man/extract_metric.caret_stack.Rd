@@ -4,11 +4,16 @@
 \alias{extract_metric.caret_stack}
 \title{Extract metrics from a \code{caret_stack} object}
 \usage{
-\method{extract_metric}{caret_stack}(caret_stack, metric = NULL)
+\method{extract_metric}{caret_stack}(x, ...)
+}
+\arguments{
+\item{x}{A \code{caret_stack} object}
+
+\item{...}{Additional arguments}
 }
 \value{
-A \code{data.table::data.table} of metrics of the individual and emsembled model
+A \code{data.table::data.table} of metrics
 }
 \description{
-Extract metrics from a \code{caret_stack} object
+Produce metrics for how the caret_list models and ensemble model perform on the training data for the caret stack
 }

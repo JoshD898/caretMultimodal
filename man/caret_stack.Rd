@@ -6,9 +6,9 @@
 \usage{
 caret_stack(
   caret_list,
+  data_list,
+  target,
   method,
-  target = NULL,
-  new_data_list = NULL,
   metric = NULL,
   trControl = NULL,
   excluded_class_id = 1L,
@@ -18,13 +18,13 @@ caret_stack(
 \arguments{
 \item{caret_list}{a \code{caret_list} object}
 
+\item{data_list}{A list of datasets to predict on, with each dataset matching the corresponding model in \code{caret_list}.}
+
+\item{target}{Target parameter vector.}
+
 \item{method}{The method to train the ensemble model. Can be a custom method or one found in \code{caret::modelLookup()}.}
 
-\item{target}{Target parameter vector. Defaults to \code{NULL}, in which case the training data from the first model is \code{caret_list} will be used.}
-
-\item{new_data_list}{A list of datasets to predict on, with each dataset matching the corresponding model in \code{caret_list}. Defaults to \code{NULL}, in which case the training data for each model is used.}
-
-\item{metric}{Metric for use with \code{caret::train} function. A default metric will be constructed depending on the target type.}
+\item{metric}{Metric for use with \code{caret::train} function. If \code{NULL}, default metric will be constructed depending on the target type.}
 
 \item{trControl}{Control for use with the \code{caret::train} function. A default control will be constructed depending on the target type.}
 

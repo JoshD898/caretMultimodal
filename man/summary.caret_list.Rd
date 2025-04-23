@@ -4,15 +4,15 @@
 \alias{summary.caret_list}
 \title{Summarize a caret_list}
 \usage{
-\method{summary}{caret_list}(caret_list, metric = NULL)
+\method{summary}{caret_list}(object, ...)
 }
 \arguments{
-\item{caret_list}{a caret_list object}
+\item{object}{a \code{caret_list} object}
 
-\item{metric}{The metric to show. If NULL will use the metric used to train each model}
+\item{...}{Additional arguments}
 }
 \value{
-A data.table with metrics from each model.
+A \code{summary.caret_list} object
 }
 \description{
 This function summarizes the performance of each model in a caret_list object.

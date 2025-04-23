@@ -4,7 +4,12 @@
 \alias{print.summary.caret_stack}
 \title{Print a summary of a \code{caret_stack} object}
 \usage{
-\method{print}{summary.caret_stack}(summary)
+\method{print}{summary.caret_stack}(x, ...)
+}
+\arguments{
+\item{x}{A \code{summary.caret_stack} object}
+
+\item{...}{Additional arguments}
 }
 \description{
 Print a summary of a \code{caret_stack} object

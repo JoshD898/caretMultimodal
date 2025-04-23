@@ -4,15 +4,15 @@
 \alias{plot.caret_list}
 \title{Plot a \code{caret_list} object}
 \usage{
-\method{plot}{caret_list}(caret_list, metric = NULL)
+\method{plot}{caret_list}(x, ...)
 }
 \arguments{
-\item{metric}{which metric to plot}
-
 \item{x}{a caret_list object}
+
+\item{...}{Additional arguments}
 }
 \value{
-A ggplot2 object
+A \code{ggplot} object
 }
 \description{
 This function plots the performance of each model in a caret_list object.

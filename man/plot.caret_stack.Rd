@@ -2,13 +2,18 @@
 % Please edit documentation in R/caret_stack.R
 \name{plot.caret_stack}
 \alias{plot.caret_stack}
-\title{Plot metrics of a \code{caret_stack} object}
+\title{Plot various metrics of a \code{caret_stack} object}
 \usage{
-\method{plot}{caret_stack}(caret_stack, metric = NULL)
+\method{plot}{caret_stack}(x, ...)
+}
+\arguments{
+\item{x}{The \code{caret_stack} object to plot metrics for}
+
+\item{...}{Additional arguments}
 }
 \value{
-A \code{ggplot2} object
+A \code{ggplot} object
 }
 \description{
-Plot metrics of a \code{caret_stack} object
+Plot various metrics of a \code{caret_stack} object
 }

@@ -4,7 +4,15 @@
 \alias{summary.caret_stack}
 \title{Get a summary of a \code{caret_stack} object}
 \usage{
-\method{summary}{caret_stack}(caret_stack)
+\method{summary}{caret_stack}(object, ...)
+}
+\arguments{
+\item{object}{A \code{caret_stack} object}
+
+\item{...}{Additional arguments}
+}
+\value{
+A \code{summary.caret_stack} object
 }
 \description{
 Get a summary of a \code{caret_stack} object
