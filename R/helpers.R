@@ -1,26 +1,24 @@
 #' @title Prediction wrapper for `caret::train`
 #' @description This is a prediction wrapper for `caret::train` with several features:
-#' - If new_data is null, return stacked predictions from the training job, rather than in-sample predictions.
+#' - If new_data is null, return out-of-fold predictions from the training job, rather than in-sample predictions.
 #' - Always returns probabilities for classification models.
 #' - Optionally drops one predicted class for classification models.
 #' - Always returns a `data.table::data.table`
+#'
 #' @param model a `caret::train` object
 #' @param new_data New data to use for predictions. If `NULL`, stacked predictions from the training data are returned.
 #' @param excluded_class_id an integer indicating the class to exclude. If 0L, no class is excluded
-#' @param aggregate_resamples logical, whether to aggregate resamples by keys. Default is TRUE.
+#' @param aggregate_resamples Whether to aggregate out-of-fold predictions across multiple resamples.
 #' @param ... additional arguments to pass to \code{\link[caret]{predict.train}}, if new_data is not NULL
 #' @return A vector of predictions
 #' @noRd
-.caret_predict <- function(model,
-                          new_data = NULL,
-                          excluded_class_id = 1L,
-                          aggregate_resamples = TRUE,
-                          ...) {
-  stopifnot(
-    is.logical(aggregate_resamples),
-    length(aggregate_resamples) == 1L,
-    inherits(model, "train")
-  )
+.caret_predict <- function(
+    model,
+    new_data,
+    excluded_class_id,
+    aggregate_resamples,
+    ...
+  ) {
 
   is_class <- .is_classifier_and_validate(model, validate_for_stacking = is.null(new_data))
 
@@ -51,10 +49,8 @@
     pred <- data.table::data.table(pred)
   }
 
-  # In both cases (stacked predictions and new predictions), drop the excluded class
-  # Make sure in both cases we have consitent column names and column order
-  # Drop the excluded class for classificaiton
   stopifnot(nrow(pred) == nrow(new_data))
+
   if (is_class) {
     stopifnot(
       ncol(pred) == nlevels(model),
@@ -69,55 +65,6 @@
   }
 
   pred
-}
-
-# Validating models ------------------------------------------------------------
-
-#' @title Validate a model type
-#' @description Validate the model type from a `caret::train` object.
-#' For classification, validates that the model can predict probabilities, and,
-#'  if stacked predictions are requested, that classProbs = TRUE.
-#' @param model a `caret::train` object
-#' @param validate_for_stacking a logical indicating whether to validate the model for stacked predictions
-#' @return a logical. TRUE if classifier, otherwise FALSE.
-#' @noRd
-.is_classifier_and_validate <- function(model, validate_for_stacking = TRUE) {
-  stopifnot(inherits(model, "train"))
-
-  is_class <- .is_classifier(model)
-
-  # Validate for predictions
-  if (is_class && !is.function(model$modelInfo$prob)) {
-    stop("No probability function found. Re-fit with a method that supports prob.", call. = FALSE)
-  }
-  # Validate for stacked predictions
-  if (validate_for_stacking) {
-    err <- "Must have savePredictions = 'all', 'final', or TRUE in trainControl to do stacked predictions."
-    if (is.null(model$control$savePredictions)) {
-      stop(err, call. = FALSE)
-    }
-    if (!model$control$savePredictions %in% c("all", "final", TRUE)) {
-      stop(err, call. = FALSE)
-    }
-    if (is_class && !model$control$classProbs) {
-      stop("classProbs = FALSE. Re-fit with classProbs = TRUE in trainControl.", call. = FALSE)
-    }
-  }
-
-  is_class
-}
-
-#' @title Is Classifier
-#' @description Check if a model is a classifier.
-#' @param model A train object from the caret package.
-#' @return A logical indicating whether the model is a classifier.
-#' @noRd
-.is_classifier <- function(model) {
-  stopifnot(inherits(model, "train"))
-
-  out <- model$modelType == "Classification"
-
-  out
 }
 
 # Dropping excluded classes ----------------------------------------------------
@@ -140,45 +87,7 @@
   pred
 }
 
-#' @title Validate the excluded class
-#' @description Helper function to ensure that the excluded level for classification is an integer.
-#' Set to 0L to exclude no class.
-#' @param excluded_class_id The value to check
-#' @return integer
-#' @noRd
-.validate_excluded_class <- function(excluded_class_id) {
 
-  if (is.null(excluded_class_id)) {
-    excluded_class_id <- 1L
-    warning("No excluded_class_id set. Setting to 1L.", call. = FALSE)
-  }
-
-  if (!is.numeric(excluded_class_id)) {
-    stop("classification excluded level must be numeric: ", excluded_class_id, call. = FALSE)
-  }
-  if (length(excluded_class_id) != 1L) {
-    stop("classification excluded level must have a length of 1: length=", length(excluded_class_id), call. = FALSE)
-  }
-
-  if (is.integer(excluded_class_id)) {
-    out <- excluded_class_id
-  } else {
-    warning("classification excluded level is not an integer: ", excluded_class_id, call. = FALSE)
-    if (is.numeric(excluded_class_id)) {
-      out <- floor(excluded_class_id)
-    }
-    out <- suppressWarnings(as.integer(out))
-  }
-
-  if (!is.finite(out)) {
-    stop("classification excluded level must be finite: ", excluded_class_id, call. = FALSE)
-  }
-  if (out < 0L) {
-    stop("classification excluded level must be >= 0: ", excluded_class_id, call. = FALSE)
-  }
-
-  out
-}
 
 # Default metrics and controls -------------------------------------------------
 
@@ -287,9 +196,9 @@
 # Extracting from `caret::train` objects` --------------------------------------
 
 #' @title Extract accuracy metrics from a `caret::train` model
-#' @description Extract the cross-validated accuracy metrics and their standard deviations.
+#' @description Extract the model accuracy metrics and their standard deviations.
 #' @param x a `caret::train` object
-#' @param metric a character string representing the metric to extract. If NULL, uses the metric that was used to train the model.
+#' @param metric a character string representing the metric to extract. If NULL or non-existent, uses the metric that was calculated while training the model.
 #' @return A `data.table::data.table` with the name, value and standard deviation of the metric
 #' @noRd
 .extract_train_metric <- function(model, metric = NULL) {
@@ -315,23 +224,23 @@
   out
 }
 
-# import data.table is necessary, if not included some data.table methods are not recognized
 
-#' @title Extract the best predictions from a `caret::train` object
-#' @description Extract the best predictions from a `caret::train` object.
+#' @title Extract the best out-of-fold predictions from a `caret::train` object
+#' @description Retrieve the out-of-fold predictions corresponding to the best
+#'   hyperparameter setting of a trained caret model. These predictions come from
+#'   the resampling process (not the final refit) and can optionally be aggregated
+#'   across resamples to produce a single prediction per training instance.
+#'
 #' @import data.table
 #' @param model A `caret::train` object
-#' @param aggregate_resamples Logical, whether to aggregate resamples by keys. Default is TRUE.
-#' @return A `data.table::data.table` with predictions
+#' @param aggregate_resamples Whether to aggregate out-of-fold predictions across multiple resamples. Default is `TRUE`.
+#' @return A `data.table::data.table` with out-of-fold predictions
 #' @noRd
-.extract_best_preds <- function(model, aggregate_resamples = TRUE) {
-  stopifnot(is.logical(aggregate_resamples), length(aggregate_resamples) == 1L, inherits(model, "train"))
+.get_oof_preds <- function(model, aggregate_resamples = TRUE) {
 
   if (is.null(model[["pred"]])) {
-    stop("No predictions saved during training. Please set savePredictions = 'final' in trControl", call. = FALSE)
+    stop("No predictions saved during training. Check resampling setup.", call. = FALSE)
   }
-
-  stopifnot(inherits(model$pred, "data.frame"))
 
   if (!is.null(model$bestTune) && nrow(model$bestTune) > 0 && !(ncol(model$bestTune) == 1 && model$bestTune[[1]] == "none")) {
     keys <- names(model$bestTune)
@@ -343,28 +252,33 @@
     pred <- data.table::data.table(model$pred)
   }
 
-  keys <- "rowIndex"
-  data.table::setkeyv(pred, keys)
+  keep_cols <- if (model$modelType == "Classification") levels(model) else "pred"
+
+
+  data.table::setorderv(pred, "rowIndex")
 
   if (aggregate_resamples) {
-    pred <- pred[, lapply(.SD, .aggregate_vector), by = keys]
+    pred <- pred[, lapply(.SD, .aggregate_vector), by = "rowIndex"]
+    pred <- pred[, keep_cols, with = FALSE]
+  } else {
+    pred <- pred[, c("rowIndex", "Resample", keep_cols), with = FALSE]
   }
-
-  data.table::setorderv(pred, keys)
 
   pred
 }
 
 #' @title Aggregate vector
-#' @description Aggregate a vector depending on its type. For numeric data return the mean. For factor data return the first value.
+#' @description Aggregate a vector depending on its type.
+#' For numeric data return the mean.
+#' For factor data return the mode.
 #' @param x A vector to be aggregated.
-#' @return The mean of numeric data or the first value of non-numeric data.
+#' @return The mean of numeric data or the mode of non-numeric data.
 #' @noRd
 .aggregate_vector <- function(x) {
   if (is.numeric(x)) {
     mean(x)
   } else {
-    x[[1L]]
+    names(sort(table(x), decreasing = TRUE))[1L]
   }
 }
 

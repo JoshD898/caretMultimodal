@@ -6,12 +6,13 @@
 #' @param data_list A list of data sets to train models on
 #' @param method The method to train the models with. Can be a custom method or one found in `caret::modelLookup()`.
 #' @param identifier_column_name The name of a column that connects the rows in the dataset (ex. a participant ID).
-#' If provided, this column must be present in all datasets within the `data_list` for proper matching.
-#' @param trControl Control for use with the `caret::train` function. A default control will be constructed depending on the target type.
-#' @param metric Metric for use with `caret::train` function. A default metric will be constructed depending on the target type.
-#' @param continue_on_fail Logical, whether to skip over a data set if the model fails to train. Default is `FALSE`.
-#' @param trim Logical, whether the train models be trimmed to save memory.
-#' @param aggregate_resamples Logical, whether to aggregate stacked predictions.
+#' If provided, this column must be present in all datasets within the `data_list` for proper matching. Use this if the datasets have different numbers of rows.
+#' @param trControl Control for use with the `caret::train` function.
+#' If `NULL`, a default control will be constructed depending on the target type.
+#' @param metric Metric for use with `caret::train` function.
+#' If `NULL`, a default metric will be constructed depending on the target type.
+#' @param trim Logical, whether the train models be trimmed to save memory. Default is `TRUE`
+#' @param aggregate_resamples Whether to aggregate out-of-fold predictions across multiple resamples. Default is `TRUE`.
 #' @param ... Any additional arguments to pass to the `caret::train` function
 #' @return A `caret_list` object, which is a list of `caret::train` model corresponding to `data_list`.
 #' @export
@@ -22,9 +23,7 @@ caret_list <- function(
     identifier_column_name = NULL,
     trControl = NULL,
     metric = NULL,
-    continue_on_fail = FALSE,
     trim = TRUE,
-    aggregate_resamples = TRUE,
     ...) {
 
   if (is.null(identifier_column_name)) {
@@ -56,12 +55,7 @@ caret_list <- function(
 
   .check_method(method)
 
-  raw_target <- if (is.null(identifier_column_name)) {
-    target
-  } else {
-    .match_identifiers(target, data_list[[1]], identifier_column_name)
-  }
-
+  raw_target <- if (is.null(identifier_column_name)) target else .match_identifiers(target, data_list[[1]], identifier_column_name)
   trControl <- if (is.null(trControl)) .default_control(raw_target) else trControl
   metric <- if (is.null(metric)) .default_metric(raw_target) else metric
 
@@ -81,21 +75,22 @@ caret_list <- function(
         train_args[["y"]] <- .match_identifiers(target, data, identifier_column_name)
       }
 
-      .caret_train(
-        train_args = train_args,
-        data = data,
-        continue_on_fail = continue_on_fail,
-        trim = trim,
-        aggregate_resamples = aggregate_resamples
-      )
+      train_args[["x"]] <- data
+
+      model <- do.call(caret::train, train_args)
+
+      if(trim) {
+        model <- .trim_model(model)
+      }
+
+      model
     }
   )
 
-
   if (is.null(names(data_list))) {
-    names(model_list) <- paste0("data_list[[", seq_along(data_list), "]]_model")
+    names(model_list) <- paste0("data_list[[", seq_along(data_list), "]]")
   } else {
-    names(model_list) <- paste0(names(data_list), "_model")
+    names(model_list) <- names(data_list)
   }
 
   class(model_list) <- c("caret_list", "list")
@@ -108,54 +103,105 @@ caret_list <- function(
 
 #' @title Create a matrix of predictions for each model in a caret_list
 #' @param caret_list A `caret_list` object
-#' @param new_data_list A list of datasets to predict on, with each dataset matching the corresponding model in `caret_list`. If `NULL`, predictions from the training data are returned.
-#' @param verbose A boolean that controls the verbosity of error messages
-#' @param excluded_class_id An integer indicating the class to exclude from predictions. If 0L, no class is excluded. Default is 1L.
-#' @param aggregate_resamples A boolean that controls whether to aggregate resamples by keys. Default is `TRUE`.
-#' @param ... Additional arguments
+#' @param data_list A list of datasets to predict on, with each dataset matching the corresponding model in `caret_list`.
+#' @param excluded_class_id An integer indicating the class index to exclude from prediction output.
+#' If `NONE`, no class is excluded. Default is 1L.
+#' @param ... Additional arguments to pass to `caret::predict`
 #' @return A `data.table::data.table` of predictions
 #' @export
 predict.caret_list <- function(
     caret_list,
-    new_data_list = NULL,
-    verbose = FALSE,
+    data_list,
     excluded_class_id = 1L,
-    aggregate_resamples = TRUE,
     ...) {
 
-  apply_fun <- if (verbose) pbapply::pblapply else lapply
-
-  if (!is.null(new_data_list)) {
-    if (length(new_data_list) != length(caret_list)) {
-      stop("The length of new_data_list must be the same length as caret_list", .call = FALSE)
-    }
-
-    row_counts <- vapply(new_data_list, nrow, integer(1L))
-
-    if (!all(row_counts == row_counts[1])) {
-      stop("All matrices in new_data_list must have the same number of rows", call. = FALSE)
-    }
-
-    new_data_list <- lapply(new_data_list, data.table::as.data.table)
+  if (length(data_list) != length(caret_list)) {
+    stop("The length of data_list must be the same length as caret_list", .call = FALSE)
   }
 
-    prediction_list <- apply_fun(seq_along(caret_list), function(i) {
-      model <- caret_list[[i]]
-      new_data <- if (!is.null(new_data_list)) new_data_list[[i]] else NULL
+  row_counts <- vapply(data_list, nrow, integer(1L))
+  if (!all(row_counts == row_counts[1])) {
+    stop("All matrices in data_list must have the same number of rows", call. = FALSE)
+  }
 
-      .caret_predict(
-        model = model,
-        new_data = new_data,
-        excluded_class_id = excluded_class_id,
-        aggregate_resamples = aggregate_resamples
-      )
-    })
+  data_list <- lapply(data_list, data.table::as.data.table)
+
+
+  prediction_list <- lapply(seq_along(caret_list), function(i) {
+    model <- caret_list[[i]]
+
+    is_classifier <- model$modelType == "Classification"
+
+    if (is_classifier && !is.function(model$modelInfo$prob)) {
+      stop("No probability function found. Re-fit with a method that supports prob.", call. = FALSE)
+    }
+
+    pred <- caret::predict.train(
+      model,
+      type = if (is_classifier) "prob" else "raw",
+      newdata = data_list[[i]],
+      ...
+    )
+
+    if (!is.null(excluded_class_id)) {
+      pred <- .drop_excluded_class(pred, all_classes = model$levels, excluded_class_id)
+    }
+
+    pred
+  })
 
   names(prediction_list) <- names(caret_list)
 
   prediction_matrix <- data.table::as.data.table(prediction_list)
 
   prediction_matrix
+}
+
+#' @title Out-of-fold predictions from a caret_list
+#' @description Retrieve the out-of-fold predictions corresponding to the best
+#'   hyperparameter setting of a trained caret model. These predictions come from
+#'   the resampling process (not the final refit) and can optionally be aggregated
+#'   across resamples to produce a single prediction per training instance.
+#' @param caret_list A `caret_list` object
+#' @param excluded_class_id An integer indicating the class index to exclude from prediction output.
+#' If `NONE`, no class is excluded. Default is 1L.
+#' @param aggregate_resamples Logical, whether to aggregate resamples across folds.
+#' @return A `data.table::data.table` of OOF predictions
+#' @export
+oof_predictions.caret_list <- function(
+    caret_list,
+    excluded_class_id = 1L,
+    aggregate_resamples = TRUE) {
+
+
+  prediction_list <- lapply(seq_along(caret_list), function(i) {
+
+    model <- caret_list[[i]]
+    is_classifier <- model$modelType == "Classification"
+
+    if (is.null(model$control$savePredictions) | !model$control$savePredictions %in% c("all", "final", TRUE)) {
+      stop("Must have savePredictions = 'all', 'final', or TRUE in trainControl.", call. = FALSE)
+    }
+
+    if (is_classifier && !model$control$classProbs) {
+      stop("classProbs = FALSE. Re-fit with classProbs = TRUE in trainControl.", call. = FALSE)
+    }
+
+    if (is.null(model$pred) || nrow(model$pred) == 0) {
+      stop("No out-of-fold predictions were generated. Check resampling setup.", call. = FALSE)
+    }
+
+    pred <- .get_oof_preds(model, aggregate_resamples)
+
+    if (!is.null(excluded_class_id)) {
+      pred <- .drop_excluded_class(pred, all_classes = model$levels, excluded_class_id)
+    }
+
+    pred
+  })
+
+  names(prediction_list) <- names(caret_list)
+  data.table::as.data.table(prediction_list)
 }
 
 extract_metric <- function(x, ...) UseMethod("extract_metric")
@@ -231,69 +277,33 @@ plot.caret_list <- function (x, ...) {
 
 # Helper functions -----------------------------------------------------------------------------------------
 
-#' @title Wrapper to train caret models
-#' @description This function is a wrapper around the `caret::train` function.
-#'    It allows for the option to continue on fail, and to trim the output model.
-#'    Trimming the model removes components that are not needed for stacking, to save
-#'    memory and speed up the stacking process. It also converts predictions to a data.table.
-#' @param train_args A named list of arguments to pass to the `caret::train` function.
-#' @param data A data set to use for model training.
-#' @param continue_on_fail A logical indicating whether to continue if the `caret::train` function fails.
-#'   If `TRUE`, the function will return `NULL` if the function fails. Default is `FALSE`.
-#' @param trim A logical indicating whether to trim the output model.
-#'   If `TRUE`, the function will remove some elements that are not needed from the output model.
-#' @param aggregate_resamples A logical indicating whether to aggregate stacked predictions Default is `TRUE`.
-#' @return A `caret::train` object or `NULL` if training fails
+#' @title Trim a caret model to reduce memory usage
+#' @description Removes unnecessary elements from a `caret::train` model to save memory.
+#' @param model A `caret::train` object.
+#' @return A trimmed `caret::train` object.
 #' @noRd
-.caret_train <- function(
-    train_args,
-    data,
-    continue_on_fail = FALSE,
-    trim = TRUE,
-    aggregate_resamples = TRUE) {
+.trim_model <- function(model) {
 
-  train_args[["x"]] <- data
-
-  if (continue_on_fail) {
-    model <- tryCatch(do.call(caret::train, train_args), error = function(e) {
-      warning(conditionMessage(e), call. = FALSE)
-      NULL
-    })
-  } else {
-    model <- tryCatch({
-      do.call(caret::train, train_args)
-    }, error = function(e) {
-      stop("A model failed to train")
-    })
+  if (!is.null(model[["modelInfo"]][["trim"]])) {
+    model[["finalModel"]] <- model[["modelInfo"]][["trim"]](model[["finalModel"]])
   }
 
-  if ("pred" %in% names(model)) {
-    model[["pred"]] <- .extract_best_preds(model, aggregate_resamples = aggregate_resamples)
+  removals <- c("call", "dots", "trainingData", "resampledCM")
+  for (i in removals) {
+    if (i %in% names(model)) {
+      model[[i]] <- NULL
+    }
   }
 
-  if (trim) {
-    if (!is.null(model[["modelInfo"]][["trim"]])) {
-      model[["finalModel"]] <- model[["modelInfo"]][["trim"]](model[["finalModel"]])
-    }
-
-    removals <- c("call", "dots", "trainingData", "resampledCM")
-    for (i in removals) {
-      if (i %in% names(model)) {
-        model[[i]] <- NULL
-      }
-    }
-
-    control_removals <- c("index", "indexOut", "indexFinal")
-    for (i in control_removals) {
-      if (i %in% names(model[["control"]])) {
-        model[["control"]][[i]] <- NULL
-      }
+  control_removals <- c("index", "indexOut", "indexFinal")
+  for (i in control_removals) {
+    if (!is.null(model[["control"]]) && i %in% names(model[["control"]])) {
+      model[["control"]][[i]] <- NULL
     }
   }
 
   model
 }
-
 
 #' @title Matches the identifiers of a target column with the rows of a data set
 #' @param target The target data table (two columns: one for the variable to train on one for identifier)

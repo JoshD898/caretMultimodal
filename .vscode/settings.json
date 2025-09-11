@@ -1,0 +1,10 @@
+{
+    "r.rterm.windows": "C:\\Users\\jpdyc\\.local\\bin\\radian.exe",
+    "r.bracketedPaste": true,
+    "r.alwaysUseActiveTerminal": true,
+    "r.sessionWatcher": true,
+    "files.exclude": {
+        "**/.svn": false,
+        "**/.vscode": true
+    }
+}
