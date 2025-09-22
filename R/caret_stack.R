@@ -17,8 +17,6 @@
 #' If `NULL`, default metric will be constructed depending on the target type.
 #' @param trControl Control for use with the `caret::train` function.
 #' If `NULL`, a default control will be constructed depending on the target type.
-#' @param excluded_class_id An integer indicating the class to exclude from predictions. If 0L, no class is excluded. Default is 1L.
-#' @param aggregate_resamples Whether to aggregate out-of-fold predictions across multiple resamples. Default is `TRUE`.
 #' @return A `caret_stack` object.
 #' @export
 caret_stack <- function(
@@ -28,12 +26,9 @@ caret_stack <- function(
     target = NULL,
     metric = NULL,
     trControl = NULL,
-    excluded_class_id = 1L,
-    aggregate_resamples = TRUE,
     ...) {
 
   stopifnot(inherits(caret_list, "caret_list"))
-
 
   if ((is.null(data_list) && !is.null(target)) | (!is.null(data_list) && is.null(target))) {
     stop("Both `data_list` and `target` must be provided, or neither", call. = FALSE)
@@ -52,27 +47,18 @@ caret_stack <- function(
       }
     }
 
-    if (length(unique(target)) == 1) {
-      stop("Target vector must contain two or more classes.", call. = FALSE)
-    }
+    predictions <- predict.caret_list(caret_list, data_list)
+  } else {
+    predictions <- oof_predictions.caret_list(caret_list)
 
-    predictions <- predict.caret_list()
-    # TODO continue here
+    obs <- data.table::data.table(caret_list[[1L]]$pred)
+    data.table::setorderv(obs, "rowIndex")
+    obs <- obs[, list(obs = obs[1L]), by = "rowIndex"]
+    target <- obs[["obs"]]
+
   }
 
-
-
-
-
-
   .check_method(method)
-
-  predictions <- predict.caret_list(
-    caret_list,
-    new_data_list = data_list,
-    excluded_class_id = excluded_class_id,
-    aggregate_resamples = aggregate_resamples
-  )
 
   metric <- if (is.null(metric)) .default_metric(target) else metric
   trControl <- if (is.null(trControl)) .default_control(target) else trControl
@@ -86,13 +72,8 @@ caret_stack <- function(
                                  ...)
 
   caret_stack <- list(
-    individual_models = caret_list,
-    individual_metrics = caret_list_metrics,
-    training_data = data_list,
-    training_target = target,
-    ensemble_model = ensemble_model,
-    error = ensemble_model$results,
-    excluded_class_id = excluded_class_id
+    caret_list = caret_list,
+    ensemble = ensemble_model
   )
 
   class(caret_stack) <- "caret_stack"
@@ -105,51 +86,92 @@ caret_stack <- function(
 
 #' @title Create a matrix of predictions for a `caret_stack` object.
 #' @param caret_stack A `caret_stack` object
-#' @param new_data_list New data to predict on. Default is `NULL`, in which case the training data is predicted on.
-#' @param verbose Boolean that controls the verbosity of error messages
-#' @param excluded_class_id An integer indicating the class to exclude from predictions. If 0L, no class is excluded. Default is 1L.
-#' @param aggregate_resamples Boolean, controls whether to aggregate resamples by keys. Default is `TRUE`.
+#' @param data_list A list of datasets to predict on, with each dataset matching the corresponding model in `caret_list`.
+#' @param excluded_class_id An integer indicating the class index to exclude from prediction output.
+#' If `NULL`, no class is excluded. Default is 1L.
+#' @param include_base Default is FALSE. Whether to include the predictions of the base models in the final data table. The base model predictions will always have an excluded_class_id of 1L.
 #' @return A `data.table::data.table` of predictions
 #' @export
 predict.caret_stack <- function(
     caret_stack,
-    new_data_list = NULL,
-    verbose = FALSE,
+    data_list,
+    excluded_class_id = 1L,
+    include_base = TRUE,
+    ...) {
+
+  base_predictions <- predict.caret_list(caret_stack$caret_list, data_list)
+
+  ensemble <- caret_stack$ensemble
+
+  is_classifier <- ensemble$modelType == "Classification"
+
+  if (is_classifier && !is.function(ensemble$modelInfo$prob)) {
+    stop("No probability function found. Re-fit with a the ensemble model with a method that supports prob.", call. = FALSE)
+  }
+
+  pred <- caret::predict.train(
+    ensemble,
+    type = if (is_classifier) "prob" else "raw",
+    newdata = base_predictions,
+    ...
+  )
+
+  if (!is.null(excluded_class_id)) {
+    pred <- .drop_excluded_class(pred, all_classes = ensemble$levels, excluded_class_id)
+  }
+
+
+
+  if (include_base) {
+
+  } else {
+    out <- data.table::as.data.table()
+  }
+
+
+
+}
+
+# TODO WRITE DESCRIPTION
+oof_predictions.caret_stack <- function(
+    caret_stack,
     excluded_class_id = 1L,
     aggregate_resamples = TRUE
     ) {
 
-  if (!is.null(new_data_list)) {
+  model <- caret_stack$ensemble
+  is_classifier <- model$modelType == "Classification"
 
-    new_pred_dataset = predict.caret_list(caret_list = caret_stack$individual_models,
-                                          new_data_list = new_data_list,
-                                          verbose = verbose,
-                                          excluded_class_id = excluded_class_id,
-                                          aggregate_resamples = aggregate_resamples)
-
-    pred <- .caret_predict(model = caret_stack$ensemble_model,
-                           new_data = new_pred_dataset,
-                           excluded_class_id = excluded_class_id,
-                           aggregate_resamples = aggregate_resamples)
-  } else {
-    pred <- .caret_predict(model = caret_stack$ensemble_model,
-                           excluded_class_id = excluded_class_id,
-                           aggregate_resamples = aggregate_resamples)
+  if (is.null(model$control$savePredictions) | !model$control$savePredictions %in% c("all", "final", TRUE)) {
+    stop("Must have savePredictions = 'all', 'final', or TRUE in trainControl for the ensemble model.", call. = FALSE)
   }
 
-  pred
-}
+  if (is_classifier && !model$control$classProbs) {
+    stop("classProbs = FALSE. Re-fit with classProbs = TRUE in trainControl for the ensemble model.", call. = FALSE)
+  }
 
-#' @title Print details of a `caret_stack` object.
-#' @param x A `caret_stack` object
-#' @param ... Additional arguments
-#' @export
-print.caret_stack <- function(x, ...) {
-  cat("The following models were ensembled:", toString(names(x$individual_models)), " \n")
-  cat("\ncaret::train model:\n")
-  print(x$ensemble_model)
-  cat("\nFinal model:\n")
-  print(x$ensemble_model$finalModel)
+  if (is.null(model$pred) || nrow(model$pred) == 0) {
+    stop("No out-of-fold predictions were generated. Check resampling setup for the ensemble model.", call. = FALSE)
+  }
+
+  pred <- .get_oof_preds(model, aggregate_resamples)
+
+  if (!is.null(excluded_class_id)) {
+    pred <- .drop_excluded_class(pred, all_classes = model$levels, excluded_class_id)
+  }
+
+  # nicely name the ensemble predictions
+  if (ncol(pred) > 1) {
+    names(pred) <- paste0("ensemble.", names(pred))
+  } else {
+    names(pred) <- "ensemble"
+  }
+
+  base_oof_predictions <- oof_predictions.caret_list(caret_stack$caret_list, excluded_class_id, aggregate_resamples)
+
+  combined_preds <- cbind(base_oof_predictions, pred)
+
+  combined_preds
 }
 
 #' @title Get a summary of a `caret_stack` object
@@ -157,101 +179,31 @@ print.caret_stack <- function(x, ...) {
 #' @param ... Additional arguments
 #' @return A `summary.caret_stack` object
 #' @export
+#' TODO MAKE THIS ONE TABLE WITH NA FILLING
 summary.caret_stack <- function(object, ...) {
-  metric <- object$ensemble_model$metric
-  imp <- caret::varImp(object$ensemble_model$finalModel, scale = TRUE)
-  imp$Overall <- imp$Overall / sum(imp$Overall) * 100
 
-  out <- list(
-    models = toString(names(object$individual_models)),
-    imp = imp,
-    metric = metric,
-    results = extract_metric(object)
-  )
-  class(out) <- "summary.caret_stack"
-  out
-}
+  print(summary.caret_list(object$caret_list))
 
-#' @title Print a summary of a `caret_stack` object
-#' @param x A `summary.caret_stack` object
-#' @param ... Additional arguments
-#' @export
-print.summary.caret_stack <- function(x, ...) {
-  cat("The following models were ensembled:", x$models, " \n")
-  cat("\nRelative importance:\n")
-  print(x$imp)
-  cat("\nModel metrics (based on caret_stack training data):\n")
-  print(x$results)
-}
 
-#' @title Extract metrics from a `caret_stack` object
-#' @description Produce metrics for how the caret_list models and ensemble model perform on the training data for the caret stack
-#' @param x A `caret_stack` object
-#' @param ... Additional arguments
-#' @return A `data.table::data.table` of metrics
-#' @export
-extract_metric.caret_stack <- function(x, ...) {
-  ensemble_metrics <- .extract_train_metric(x$ensemble_model)
-  individual_metrics <- x$individual_metrics
+  model <- object$ensemble
+  results <- data.table::as.data.table(model$results)
 
-  data.table::set(ensemble_metrics, j = "model", value = "ensemble")
-  data.table::setcolorder(ensemble_metrics, c("model", setdiff(names(ensemble_metrics), "model")))
-
-  all_metrics <- rbind(ensemble_metrics, individual_metrics, ignore.attr = TRUE)
-  all_metrics
-}
-
-#' @title Plot various metrics of a `caret_stack` object
-#' @param x The `caret_stack` object to plot metrics for
-#' @param ... Additional arguments
-#' @return A `ggplot` object
-#' @export
-plot.caret_stack <- function(x, ...) {
-  dat <- extract_metric(x)
-  summary <- summary(x)
-
-  model_order <- unique(dat[["model"]])
-  dat[["model"]] <- factor(dat[["model"]], levels = model_order)
-
-  metric_plot <- ggplot2::ggplot(
-    dat,
-    ggplot2::aes(
-      x = .data[["model"]],
-      y = .data[["value"]],
-      ymin = .data[["value"]] - .data[["sd"]],
-      ymax = .data[["value"]] + .data[["sd"]],
-      color = .data[["metric"]]
-    )
-  ) +
-    ggplot2::geom_pointrange() +
-    ggplot2::theme_bw() +
-    ggplot2::labs(title = "Model Metrics", x = "", y = "Metric Value")
-
-  imp <- summary$imp
-  importance_plot <- ggplot2::ggplot(
-    imp,
-    ggplot2::aes(
-      x = stats::reorder(rownames(imp), imp$Overall),  # Explicitly reference Overall here
-      y = imp$Overall  # Explicitly reference Overall here
-    )
-  ) +
-    ggplot2::geom_bar(stat = "identity", fill = "skyblue") +
-    ggplot2::theme_bw() +
-    ggplot2::labs(title = "Relative Importance of Individual Models", x = "", y = "Relative Importance (%)")
-
-  if (x$ensemble_model$metric == "ROC") {
-    out <- patchwork::wrap_plots(metric_plot, importance_plot, .plot_roc(x), ncol = 1)
+  if (is.null(model$bestTune) || nrow(model$bestTune) == 0) {
+    best_results <- results
   } else {
-    out <- patchwork::wrap_plots(metric_plot, importance_plot, ncol = 1)
+    best_tune <- as.list(model$bestTune)
+    best_results <- results[best_tune, on = names(best_tune)]
   }
 
-  out
+  print(best_results)
 }
 
 # Helper functions -------------------------------------------------------------
 
 
 #' @title Plot ROC curves for individual and ensemble models in a caret_stack
+#' @description This function calculates an ROC curve for all the base models and ensemble model based on their out of fold predictions.
+#' Optionally, you can provide new data and a target variable
 #' @importFrom rlang .data
 #' @param caret_stack The caret_stack to plot
 #' @return A `ggplot2` object

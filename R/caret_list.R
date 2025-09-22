@@ -102,10 +102,11 @@ caret_list <- function(
 # Methods ------------------------------------------------------------------------------------------
 
 #' @title Create a matrix of predictions for each model in a caret_list
+#' @description This always return probabilities for classification models, with the option to drop one predicted class.
 #' @param caret_list A `caret_list` object
 #' @param data_list A list of datasets to predict on, with each dataset matching the corresponding model in `caret_list`.
 #' @param excluded_class_id An integer indicating the class index to exclude from prediction output.
-#' If `NONE`, no class is excluded. Default is 1L.
+#' If `NULL`, no class is excluded. Default is 1L.
 #' @param ... Additional arguments to pass to `caret::predict`
 #' @return A `data.table::data.table` of predictions
 #' @export
@@ -173,7 +174,6 @@ oof_predictions.caret_list <- function(
     excluded_class_id = 1L,
     aggregate_resamples = TRUE) {
 
-
   prediction_list <- lapply(seq_along(caret_list), function(i) {
 
     model <- caret_list[[i]]
@@ -204,76 +204,32 @@ oof_predictions.caret_list <- function(
   data.table::as.data.table(prediction_list)
 }
 
-extract_metric <- function(x, ...) UseMethod("extract_metric")
 
-#' @title Extract accuracy metrics from a `caret_list` object
-#' @description Extract the cross-validated accuracy metrics from each model in a `caret_list`.
+#' @title Provide a summary of the best tuning parameters and resampling metrics for all the `caret_list` models.
 #' @param x a `caret_list` object
 #' @param ... Additional arguments
-#' @return A data.table with metrics from each model.
+#' @return A `data.table` with tunes and metrics from each model.
 #' @export
-extract_metric.caret_list <- function (x, ...) {
+summary.caret_list <- function (x, ...) {
   metrics <- lapply(names(x), function(model_name) {
-    df <- .extract_train_metric(x[[model_name]])
-    set(df, j = "model", value = model_name)
-    df
+    model <- x[[model_name]]
+    results <- data.table::as.data.table(model$results)
+
+    if (is.null(model$bestTune) || nrow(model$bestTune) == 0) {
+      best_results <- results
+    } else {
+      best_tune <- as.list(model$bestTune)
+      best_results <- results[best_tune, on = names(best_tune)]
+    }
+
+    best_results[, model := model_name]
+    best_results
   })
+
   metrics <- data.table::rbindlist(metrics, use.names = TRUE, fill = TRUE)
   metrics <- metrics[, c("model", setdiff(names(metrics), "model")), with = FALSE]
   metrics
 }
-
-#' @title Summarize a caret_list
-#' @description This function summarizes the performance of each model in a caret_list object.
-#' @param object a `caret_list` object
-#' @param ... Additional arguments
-#' @return A `summary.caret_list` object
-#' @export
-summary.caret_list <- function(object, ...) {
-  out <- list(
-    models = toString(names(object)),
-    metrics = extract_metric(object)
-  )
-  class(out) <- "summary.caret_list"
-
-  out
-}
-
-#' @title Print a summary of a caret_list
-#' @param x A `summary.caret_list` object
-#' @param ... Additional arguments
-#' @export
-print.summary.caret_list <- function(x, ...) {
-  cat("The following models were trained:", x[["models"]], "\n")
-  cat("\nModel metrics:\n")
-  print(x[["metrics"]])
-}
-
-#' @title Plot a `caret_list` object
-#' @description This function plots the performance of each model in a caret_list object.
-#' @param x a caret_list object
-#' @param ... Additional arguments
-#' @return A `ggplot` object
-#' @export
-plot.caret_list <- function (x, ...) {
-  dat <- extract_metric(x)
-  plt <- ggplot2::ggplot(
-    dat, ggplot2::aes(
-      x = .data[["model"]],
-      y = .data[["value"]],
-      ymin = .data[["value"]] - .data[["sd"]],
-      ymax = .data[["value"]] + .data[["sd"]],
-      color = .data[["metric"]]
-    )
-  ) +
-    ggplot2::geom_pointrange() +
-    ggplot2::theme_bw() +
-    ggplot2::labs(x = "Model", y = "Metric Value")
-
-  plt
-}
-
-
 
 # Helper functions -----------------------------------------------------------------------------------------
 
