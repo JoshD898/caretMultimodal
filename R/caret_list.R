@@ -222,44 +222,21 @@ summary.caret_list <- function (x, ...) {
       best_results <- results[best_tune, on = names(best_tune)]
     }
 
+    best_results[, method := model$method]
     best_results[, model := model_name]
+
+
     best_results
   })
 
   metrics <- data.table::rbindlist(metrics, use.names = TRUE, fill = TRUE)
-  metrics <- metrics[, c("model", setdiff(names(metrics), "model")), with = FALSE]
+  metrics <- metrics[, c("model", "method", setdiff(names(metrics), c("model", "method"))), with = FALSE]
   metrics
 }
 
 # Helper functions -----------------------------------------------------------------------------------------
 
-#' @title Trim a caret model to reduce memory usage
-#' @description Removes unnecessary elements from a `caret::train` model to save memory.
-#' @param model A `caret::train` object.
-#' @return A trimmed `caret::train` object.
-#' @noRd
-.trim_model <- function(model) {
 
-  if (!is.null(model[["modelInfo"]][["trim"]])) {
-    model[["finalModel"]] <- model[["modelInfo"]][["trim"]](model[["finalModel"]])
-  }
-
-  removals <- c("call", "dots", "trainingData", "resampledCM")
-  for (i in removals) {
-    if (i %in% names(model)) {
-      model[[i]] <- NULL
-    }
-  }
-
-  control_removals <- c("index", "indexOut", "indexFinal")
-  for (i in control_removals) {
-    if (!is.null(model[["control"]]) && i %in% names(model[["control"]])) {
-      model[["control"]][[i]] <- NULL
-    }
-  }
-
-  model
-}
 
 #' @title Matches the identifiers of a target column with the rows of a data set
 #' @param target The target data table (two columns: one for the variable to train on one for identifier)
