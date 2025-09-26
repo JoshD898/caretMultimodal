@@ -39,7 +39,6 @@
     index = caret::createFolds(target, k = 5L, list = TRUE, returnTrain = TRUE),
     savePredictions = "final",
     classProbs = is_class,
-    summaryFunction = ifelse(is_class && is_binary, caret::twoClassSummary, caret::defaultSummary),
-    returnData = FALSE
+    summaryFunction = ifelse(is_class && is_binary, caret::twoClassSummary, caret::defaultSummary)
   )
 }

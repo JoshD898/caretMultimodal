@@ -23,68 +23,90 @@ sets](https://amritsingh.shinyapps.io/omicsBioAnalytics/) on heart
 failure. The data sets are described
 [here](https://pubmed.ncbi.nlm.nih.gov/30935638/).
 
-Let's train models on rows 10 - 20 of the **cells, holter, and protein**
-data sets to predict patient **hospitalization** using the **random
-forest (RF)** method.
+Let's train models on the **cells, holter, mrna and protein**
+data sets to predict patient **hospitalization** using the **GLMNET** method.
+A feature of this package is that 5 fold cross validation will be done by default.
 
 ### Creating a `caret_list` object
 
 ``` r
-# Load the heart failure data
-load(system.file("sample_data", "HeartFailure.RData", package = "caretMultimodal")) 
+set.seed(123L)
 
-models <- caretMultimodal::caret_list(
-    target = demo$hospitalizations[10:20], 
-    data_list = list(cells = cells[10:20,], holter = holter[10:20,], proteins = proteins[10:20,]), 
-    method = "rf"
+# Load the heart failure data
+
+caretMultimodal::load_heart_failure()
+
+# Set up tuneGrid
+
+alphas <- seq(0, 1, by = 0.1)
+lambdas <- seq(0.001, 0.1, by = 0.01)
+tuneGrid <- expand.grid(alpha = alphas, lambda = lambdas)
+
+# Train the base models
+
+base_models <- caretMultimodal::caret_list(
+  target = demo$hospitalizations,
+  data_list = list(
+    cells = cells,
+    holter = holter,
+    mrna = mrna,
+    proteins = proteins
+  ),
+  method = "glmnet",
+  tuneGrid = tuneGrid
 )
 
-summary(models)
-#> The following models were trained: cells_model, holter_model, proteins_model 
-#>
-#> Model metrics:
-#>             model method metric value        sd
-#>            <char> <char> <char> <num>     <num>
-#> 1:    cells_model     rf    ROC   0.5 0.5000000
-#> 2:   holter_model     rf    ROC   0.8 0.4472136
-#> 3: proteins_model     rf    ROC   1.0 0.0000000
+# oof_predictions returns the out-of-fold predictions from the cross validation process
 
-plot(models)
+oof_predictions(base_models)
+#>         cells     holter        mrna     proteins
+#>         <num>      <num>       <num>        <num>
+#> 1: 0.40001341 0.36187558 0.343293728 0.9583191347
+#> 2: 0.29711949 0.19240098 0.372329672 0.2918167839
+#> 3: 0.31321699 0.20112728 0.253431072 0.9460390426
+#> 4: 0.16659585 0.25782410 0.200639977 0.3159580667
+#> 5: 0.42837382 0.26038426 0.835305233 0.0400812811
+#>           ...        ...         ...          ...
+
+# summary shows the best tuning parameters and corresponding cross validated metrics from training
+
+summary(base_models)
+#>       model method alpha lambda       ROC      Sens       Spec      ROCSD     SensSD    SpecSD
+#>      <char> <char> <num>  <num>     <num>     <num>      <num>      <num>      <num>     <num>
+#> 1:    cells glmnet   0.8  0.091 0.7740741 0.9777778 0.00000000 0.14721931 0.04969040 0.0000000
+#> 2:   holter glmnet   0.8  0.091 0.7851852 1.0000000 0.10000000 0.08842471 0.00000000 0.2236068
+#> 3:     mrna glmnet   0.0  0.091 0.8407407 0.9555556 0.06666667 0.12803249 0.06085806 0.1490712
+#> 4: proteins glmnet   0.3  0.051 0.9111111 0.9555556 0.30000000 0.08425417 0.06085806 0.2981424
+
 ```
-
-![image](https://github.com/user-attachments/assets/6c896c2a-a88f-4263-a0e7-d95e12138b87)
 
 ### Using `caret_stack` to stack models
 
-The `caret_stack` function trains a new `caret::train` object on the
-predictions from models in a `caret_list`. Let's use the **GLMNET**
-method to train an ensemble model with the remaining rows of the
-**cells, holter, and protein** data sets.
+Now, lets use the `caret_stack` function to train an ensemble model on the out-of-fold predictions from the base models. 
+
+Alternatively, if we wanted to we could use transfer learning to train the ensemble model on entirely new data.
 
 ``` r
 stack <- caretMultimodal::caret_stack(
     caret_list = models,
-    data_list = list(cells = cells[-(10:20),], holter = holter[-(10:20),], proteins = proteins[-(10:20),]),
-    target = demo$hospitalizations[-(10:20)], 
-    method = "glmnet"
+    method = "glmnet",
+    tuneGrid = tuneGrid
 )
 
+# summary now includes the ensemble model
+
 summary(stack)
-#> The following models were ensembled: cells_model, holter_model, proteins_model  
-#> 
-#> Relative importance:
-#>                 Overall
-#> cells_model    36.65609
-#> holter_model   15.42738
-#> proteins_model 47.91653
-#> 
-#> Model metrics (based on caret_stack training data):
-#>             model method metric     value         sd
-#>            <char> <char> <char>     <num>      <num>
-#> 1:       ensemble glmnet    ROC 0.7392857 0.16540766
-#> 2:    cells_model     rf    ROC 0.5977564 0.11202056
-#> 3:   holter_model     rf    ROC 0.6666667 0.08445071
-#> 4: proteins_model     rf    ROC 0.6602564 0.09410487
+#>       model method alpha lambda       ROC      Sens       Spec      ROCSD     SensSD    SpecSD
+#>      <char> <char> <num>  <num>     <num>     <num>      <num>      <num>      <num>     <num>
+#> 1:    cells glmnet   0.8  0.091 0.7740741 0.9777778 0.00000000 0.14721931 0.04969040 0.0000000
+#> 2:   holter glmnet   0.8  0.091 0.7851852 1.0000000 0.10000000 0.08842471 0.00000000 0.2236068
+#> 3:     mrna glmnet   0.0  0.091 0.8407407 0.9555556 0.06666667 0.12803249 0.06085806 0.1490712
+#> 4: proteins glmnet   0.3  0.051 0.9111111 0.9555556 0.30000000 0.08425417 0.06085806 0.2981424
+#> 5: ensemble glmnet   0.3  0.091 0.9444444 0.9333333 0.43333333 0.05555556 0.09938080 0.3651484
+
+# oof_predictions returns the out-of-fold predictions for the ensemble model, as well as whatever data was used to train the ensemble model.
+
+# predict is used to make predictions on new datasets
 
 predict(
     stack,

@@ -124,15 +124,7 @@ predict.caret_stack <- function(
     pred <- .drop_excluded_class(pred, all_classes = ensemble$levels, excluded_class_id)
   }
 
-
-
-  if (include_base) {
-
-  } else {
-    out <- data.table::as.data.table()
-  }
-
-
+  pred
 
 }
 
@@ -187,7 +179,7 @@ oof_predictions.caret_stack <- function(
     names(pred) <- "ensemble"
   }
 
-  training_data <- subset(model$trainingData, select = -c(.outcome))
+  training_data <- subset(model$trainingData, subset = TRUE, select = -c(.outcome))
 
   combined_preds <- cbind(training_data, pred)
 
@@ -197,7 +189,7 @@ oof_predictions.caret_stack <- function(
 #' @title Get a summary of a `caret_stack` object
 #' @param object A `caret_stack` object
 #' @param ... Additional arguments
-#' @return A `data.table` of methods, tuning parameters and performance metrics for the bas eand ensemble model
+#' @return A `data.table` of methods, tuning parameters and performance metrics for the base and ensemble model
 #' @export
 summary.caret_stack <- function(object, ...) {
 
@@ -209,7 +201,7 @@ summary.caret_stack <- function(object, ...) {
     best_results <- results
   } else {
     best_tune <- as.list(model$bestTune)
-    best_results <- results[best_tune, on = nioi8ames(best_tune)]
+    best_results <- results[best_tune, on = names(best_tune)]
   }
 
   best_results[, method := model$method[1]]
