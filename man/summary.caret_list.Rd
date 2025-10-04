@@ -2,7 +2,7 @@
 % Please edit documentation in R/caret_list.R
 \name{summary.caret_list}
 \alias{summary.caret_list}
-\title{Summarize a caret_list}
+\title{Provide a summary of the best tuning parameters and resampling metrics for all the \code{caret_list} models.}
 \usage{
 \method{summary}{caret_list}(object, ...)
 }
@@ -12,8 +12,8 @@
 \item{...}{Additional arguments}
 }
 \value{
-A \code{summary.caret_list} object
+A \code{data.table} with tunes and metrics from each model.
 }
 \description{
-This function summarizes the performance of each model in a caret_list object.
+Provide a summary of the best tuning parameters and resampling metrics for all the \code{caret_list} models.
 }

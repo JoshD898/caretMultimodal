@@ -4,31 +4,21 @@
 \alias{predict.caret_list}
 \title{Create a matrix of predictions for each model in a caret_list}
 \usage{
-\method{predict}{caret_list}(
-  caret_list,
-  new_data_list = NULL,
-  verbose = FALSE,
-  excluded_class_id = 1L,
-  aggregate_resamples = TRUE,
-  ...
-)
+\method{predict}{caret_list}(object, data_list, excluded_class_id = 1L, ...)
 }
 \arguments{
-\item{caret_list}{A \code{caret_list} object}
+\item{object}{A \code{caret_list} object}
 
-\item{new_data_list}{A list of datasets to predict on, with each dataset matching the corresponding model in \code{caret_list}. If \code{NULL}, predictions from the training data are returned.}
+\item{data_list}{A list of datasets to predict on, with each dataset matching the corresponding model in \code{caret_list}.}
 
-\item{verbose}{A boolean that controls the verbosity of error messages}
+\item{excluded_class_id}{An integer indicating the class index to exclude from prediction output.
+If \code{NULL}, no class is excluded. Default is 1L.}
 
-\item{excluded_class_id}{An integer indicating the class to exclude from predictions. If 0L, no class is excluded. Default is 1L.}
-
-\item{aggregate_resamples}{A boolean that controls whether to aggregate resamples by keys. Default is \code{TRUE}.}
-
-\item{...}{Additional arguments}
+\item{...}{Additional arguments to pass to \code{caret::predict}}
 }
 \value{
 A \code{data.table::data.table} of predictions
 }
 \description{
-Create a matrix of predictions for each model in a caret_list
+This always return probabilities for classification models, with the option to drop one predicted class.
 }

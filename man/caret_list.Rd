@@ -11,9 +11,7 @@ caret_list(
   identifier_column_name = NULL,
   trControl = NULL,
   metric = NULL,
-  continue_on_fail = FALSE,
   trim = TRUE,
-  aggregate_resamples = TRUE,
   ...
 )
 }
@@ -25,19 +23,19 @@ caret_list(
 \item{method}{The method to train the models with. Can be a custom method or one found in \code{caret::modelLookup()}.}
 
 \item{identifier_column_name}{The name of a column that connects the rows in the dataset (ex. a participant ID).
-If provided, this column must be present in all datasets within the \code{data_list} for proper matching.}
+If provided, this column must be present in all datasets within the \code{data_list} for proper matching. Use this if the datasets have different numbers of rows.}
 
-\item{trControl}{Control for use with the \code{caret::train} function. A default control will be constructed depending on the target type.}
+\item{trControl}{Control for use with the \code{caret::train} function.
+If \code{NULL}, a default control will be constructed depending on the target type.}
 
-\item{metric}{Metric for use with \code{caret::train} function. A default metric will be constructed depending on the target type.}
+\item{metric}{Metric for use with \code{caret::train} function.
+If \code{NULL}, a default metric will be constructed depending on the target type.}
 
-\item{continue_on_fail}{Logical, whether to skip over a data set if the model fails to train. Default is \code{FALSE}.}
-
-\item{trim}{Logical, whether the train models be trimmed to save memory.}
-
-\item{aggregate_resamples}{Logical, whether to aggregate stacked predictions.}
+\item{trim}{Logical, whether the train models be trimmed to save memory. Default is \code{TRUE}}
 
 \item{...}{Any additional arguments to pass to the \code{caret::train} function}
+
+\item{aggregate_resamples}{Whether to aggregate out-of-fold predictions across multiple resamples. Default is \code{TRUE}.}
 }
 \value{
 A \code{caret_list} object, which is a list of \code{caret::train} model corresponding to \code{data_list}.

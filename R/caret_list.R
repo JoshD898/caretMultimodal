@@ -12,7 +12,6 @@
 #' @param metric Metric for use with `caret::train` function.
 #' If `NULL`, a default metric will be constructed depending on the target type.
 #' @param trim Logical, whether the train models be trimmed to save memory. Default is `TRUE`
-#' @param aggregate_resamples Whether to aggregate out-of-fold predictions across multiple resamples. Default is `TRUE`.
 #' @param ... Any additional arguments to pass to the `caret::train` function
 #' @return A `caret_list` object, which is a list of `caret::train` model corresponding to `data_list`.
 #' @export
@@ -103,7 +102,7 @@ caret_list <- function(
 
 #' @title Create a matrix of predictions for each model in a caret_list
 #' @description This always return probabilities for classification models, with the option to drop one predicted class.
-#' @param caret_list A `caret_list` object
+#' @param object A `caret_list` object
 #' @param data_list A list of datasets to predict on, with each dataset matching the corresponding model in `caret_list`.
 #' @param excluded_class_id An integer indicating the class index to exclude from prediction output.
 #' If `NULL`, no class is excluded. Default is 1L.
@@ -111,10 +110,12 @@ caret_list <- function(
 #' @return A `data.table::data.table` of predictions
 #' @export
 predict.caret_list <- function(
-    caret_list,
+    object,
     data_list,
     excluded_class_id = 1L,
     ...) {
+
+  caret_list <- object
 
   if (length(data_list) != length(caret_list)) {
     stop("The length of data_list must be the same length as caret_list", .call = FALSE)
@@ -163,16 +164,20 @@ predict.caret_list <- function(
 #'   hyperparameter setting of a trained caret model. These predictions come from
 #'   the resampling process (not the final refit) and can optionally be aggregated
 #'   across resamples to produce a single prediction per training instance.
-#' @param caret_list A `caret_list` object
+#' @param object A `caret_list` object
 #' @param excluded_class_id An integer indicating the class index to exclude from prediction output.
 #' If `NONE`, no class is excluded. Default is 1L.
 #' @param aggregate_resamples Logical, whether to aggregate resamples across folds.
+#' @param ... Additional arguments
 #' @return A `data.table::data.table` of OOF predictions
 #' @export
 oof_predictions.caret_list <- function(
-    caret_list,
+    object,
     excluded_class_id = 1L,
-    aggregate_resamples = TRUE) {
+    aggregate_resamples = TRUE,
+    ...) {
+
+  caret_list <- object
 
   prediction_list <- lapply(seq_along(caret_list), function(i) {
 
@@ -206,13 +211,16 @@ oof_predictions.caret_list <- function(
 
 
 #' @title Provide a summary of the best tuning parameters and resampling metrics for all the `caret_list` models.
-#' @param x a `caret_list` object
+#' @param object a `caret_list` object
 #' @param ... Additional arguments
 #' @return A `data.table` with tunes and metrics from each model.
 #' @export
-summary.caret_list <- function (x, ...) {
-  metrics <- lapply(names(x), function(model_name) {
-    model <- x[[model_name]]
+summary.caret_list <- function (object, ...) {
+
+  caret_list <- object
+
+  metrics <- lapply(names(caret_list), function(model_name) {
+    model <- caret_list[[model_name]]
     results <- data.table::as.data.table(model$results)
 
     if (is.null(model$bestTune) || nrow(model$bestTune) == 0) {

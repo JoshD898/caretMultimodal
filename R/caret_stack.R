@@ -18,6 +18,7 @@
 #' @param trControl Control for use with the `caret::train` function.
 #' If `NULL`, a default control will be constructed depending on the target type.
 #' @param trim Logical, whether the train models be trimmed to save memory. Default is `TRUE`
+#' @param ... Additional arguments to pass to `caret::train`
 #' @return A `caret_stack` object.
 #' @export
 caret_stack <- function(
@@ -91,21 +92,23 @@ caret_stack <- function(
 # Methods ----------------------------------------------------------------------
 
 #' @title Create a matrix of predictions for a `caret_stack` object.
-#' @param caret_stack A `caret_stack` object
+#' @param object A `caret_stack` object
 #' @param data_list A list of datasets to predict on, with each dataset matching the corresponding model in `caret_list`.
 #' @param excluded_class_id An integer indicating the class index to exclude from prediction output.
 #' If `NULL`, no class is excluded. Default is 1L.
+#' @param ... Additional arguments
 #' @return A `data.table::data.table` of predictions for base and ensemble models.
 #' @export
 predict.caret_stack <- function(
-    caret_stack,
+    object,
     data_list,
     excluded_class_id = 1L,
-    ...) {
+    ...
+  ) {
 
-  base_predictions <- predict.caret_list(caret_stack$caret_list, data_list)
+  base_predictions <- predict.caret_list(object$caret_list, data_list)
 
-  ensemble <- caret_stack$ensemble
+  ensemble <- object$ensemble
 
   is_classifier <- ensemble$modelType == "Classification"
 
@@ -124,8 +127,15 @@ predict.caret_stack <- function(
     pred <- .drop_excluded_class(pred, all_classes = ensemble$levels, excluded_class_id)
   }
 
-  pred
+  if (ncol(pred) > 1) {
+    names(pred) <- paste0("ensemble.", names(pred))
+  } else {
+    names(pred) <- "ensemble"
+  }
 
+  combined_preds <- cbind(base_predictions, pred)
+
+  combined_preds
 }
 
 #' @title Out-of-fold predictions from a caret_stack
@@ -139,17 +149,21 @@ predict.caret_stack <- function(
 #'   fitted values. For classification models, the predictions always exclude the
 #'   first class index.
 #'
-#' @param caret_stack A `caret_stack` object
+#' @param object A `caret_stack` object
 #' @param excluded_class_id An integer indicating the class index to exclude from ensemble prediction output.
 #' If `NONE`, no class is excluded. Default is 1L.
 #' @param aggregate_resamples Logical, whether to aggregate resamples across folds.
+#' @param ... Additional arguments
 #' @return A `data.table::data.table` of OOF predictions
 #' @export
 oof_predictions.caret_stack <- function(
-    caret_stack,
+    object,
     excluded_class_id = 1L,
-    aggregate_resamples = TRUE
-    ) {
+    aggregate_resamples = TRUE,
+    ...
+  ) {
+
+  caret_stack <- object
 
   model <- caret_stack$ensemble
   is_classifier <- model$modelType == "Classification"
@@ -211,21 +225,23 @@ summary.caret_stack <- function(object, ...) {
   summary_dt
 }
 
-# Helper functions -------------------------------------------------------------
-
-
 #' @title Plot ROC curves for individual and ensemble models in a caret_stack
 #' @description This function calculates ROC curves for all base models and the ensemble model
 #' using the out-of-fold predictions from a `caret_stack` object.
-#' The `pROC` package is used to compute the ROC curves.
+#' The `pROC` package is used to compute the ROC curves. ROC curves can only be constructed for binary calssifiers.
 #'
-#' @param caret_stack The caret_stack to plot
+#' @param object A `caret_stack` object
 #' @param include_auc Whether to include AUC values in the legend. Default is `True`.
+#' @param ... Additional arguments
 #' @return A `ggplot2` object
-#' @noRd
+#' @export
 plot_roc.caret_stack <- function(
-    caret_stack,
-    include_auc = TRUE) {
+    object,
+    include_auc = TRUE,
+    ...
+  ) {
+
+  caret_stack <- object
 
   if (!(caret_stack$ensemble$modelType == "Classification" && length(caret_stack$ensemble$levels) == 2)) {
     stop("ROC curves are only available for binary classifiers.")
@@ -256,7 +272,7 @@ plot_roc.caret_stack <- function(
   roc_data$Model <- factor(
     roc_data$Model,
     levels = names(aucs),
-    labels <- if (include_auc) auc_labels else names(aucs)
+    labels = if (include_auc) auc_labels else names(aucs)
   )
 
   ggplot2::ggplot(roc_data,
@@ -268,3 +284,152 @@ plot_roc.caret_stack <- function(
 }
 
 
+#' @title Compute metrics with a provided metric function
+#' @description The metric_function is applied to the out-of-fold predictions for the caret_stack.
+#' @param object A `caret_stack` object
+#' @param metric_function A function that takes two arguments `(predictions, target)`
+#' and returns a single numeric value representing the metric to compute (e.g., RMSE, accuracy, AUC).
+#' @param metric_name The name of the metric
+#' @param descending Whether to sort in descending order. If `FALSE`, the output is sorted in ascending order. Default is `TRUE`.
+#' @param ... Additional arguments
+#' @return A `data.table` of metrics
+#' @export
+compute_metric.caret_stack <- function(
+    object,
+    metric_function,
+    metric_name,
+    descending = TRUE,
+    ...
+  ) {
+
+  caret_stack <- object
+
+  predictions <- oof_predictions.caret_stack(caret_stack)
+  target <- caret_stack$ensemble$trainingData$.outcome
+
+  metric_vals <- sapply(predictions, function(pred) {
+    metric <- suppressWarnings(metric_function(pred, target))
+
+    if (is.list(metric) | length(metric) > 1) {
+      stop("metric_function must return a single value.")
+    }
+
+    metric
+  })
+
+  metric_dt <- data.table::data.table(
+    Model = names(metric_vals),
+    temp = as.numeric(metric_vals)
+  )
+
+  if (descending) {
+    data.table::setorder(metric_dt, "temp")
+  } else {
+    data.table::setorder(metric_dt, -"temp")
+  }
+
+  data.table::setnames(metric_dt, "temp", metric_name)
+
+  metric_dt
+}
+
+
+#' @title Plot metrics computed with a provided metric function
+#' @description This function constructs a bar plot with the output of the compute metric method.
+#' The bars are ordered by increasing value.
+#' @param object A `caret_stack` object
+#' @param metric_function A function that takes two arguments `(predictions, target)`
+#' and returns a single numeric value representing the metric to compute (e.g., RMSE, accuracy, AUC).
+#' @param metric_name The name of the metric
+#' @param descending Whether to sort in descending order. If `FALSE`, the output is sorted in ascending order. Default is `TRUE`.
+#' @param ... Additional arguments
+#' @return A `ggplot2` bar chart
+#' @export
+plot_metric.caret_stack <- function(
+    object,
+    metric_function,
+    metric_name,
+    descending = TRUE,
+    ...
+  ) {
+
+  caret_stack <- object
+
+  metrics <- compute_metric.caret_stack(caret_stack, metric_function, metric_name, descending)
+  metrics[, Model := factor(Model, levels = Model)]
+
+  ggplot2::ggplot(metrics,
+    ggplot2::aes(x = Model, y = .data[[metric_name]], fill = Model)) +
+    ggplot2::geom_col() +
+    ggplot2::labs(title = paste0(metric_name, " by Model"), x = NULL, y = metric_name) +
+    ggplot2::theme_bw(base_size = 14) +
+    ggplot2::theme(
+      plot.title   = ggplot2::element_text(hjust = 0.5),
+      legend.position = "none",
+      axis.text.x  = ggplot2::element_text(angle = 45, vjust = 1, hjust = 1, size = 14)
+    )
+}
+
+
+#' @title Compute the relative importance of each of the base models in the ensemble model
+#' @description The relative importance are calculated using the `caret::varImp` function.
+#' A scaling factor is applied to make the importance sum to 100%.
+#' @param object A `caret_stack` object
+#' @param descending Whether to sort in descending order. If `FALSE`, the output is sorted in ascending order. Default is `TRUE`.
+#' @param ... Additional arguments
+#' @return A `ggplot2` bar chart
+#' @export
+compute_varimp.caret_stack <- function(
+    object,
+    descending = TRUE,
+    ...
+  ) {
+
+  caret_stack <- object
+
+  ensemble <- caret_stack$ensemble
+
+  importance_dt <- caret::varImp(ensemble)$importance
+  importance_dt <- importance_dt / sum(importance_dt) * 100
+  importance_dt <- data.table::as.data.table(importance_dt, keep.rownames = "Model")
+  data.table::setnames(importance_dt, "Overall", "Relative Importance")
+
+  if (descending) {
+    data.table::setorder(importance_dt, -`Relative Importance`)
+  } else {
+    data.table::setorder(importance_dt, `Relative Importance`)
+  }
+
+  importance_dt
+}
+
+#' @title Plot the relative importance of each of the base models in the ensemble model
+#' @description The relative importance are calculated using the `caret::varImp` function.
+#' A scaling factor is applied to make the importance sum to 100%.
+#' @param object A `caret_stack` object
+#' @param descending Whether to sort in descending order. If `FALSE`, the output is sorted in ascending order. Default is `TRUE`.
+#' @param ... Additional arguments
+#' @return A `ggplot2` bar chart
+#' @export
+plot_varimp.caret_stack <- function(
+    object,
+    descending = TRUE,
+    ...
+  ) {
+
+  caret_stack <- object
+
+  importance_dt <- compute_varimp.caret_stack(caret_stack, descending)
+  importance_dt[, Model := factor(Model, levels = Model)]
+
+  ggplot2::ggplot(importance_dt,
+    ggplot2::aes(x = Model, y = .data[["Relative Importance"]], fill = Model)) +
+    ggplot2::geom_col() +
+    ggplot2::labs(title = "Relative Importance of Base Models", x = NULL, y = "Relative Importance (%)") +
+    ggplot2::theme_bw(base_size = 14) +
+    ggplot2::theme(
+      plot.title   = ggplot2::element_text(hjust = 0.5),
+      legend.position = "none",
+      axis.text.x  = ggplot2::element_text(angle = 45, vjust = 1, hjust = 1, size = 14)
+    )
+}

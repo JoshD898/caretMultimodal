@@ -4,27 +4,20 @@
 \alias{predict.caret_stack}
 \title{Create a matrix of predictions for a \code{caret_stack} object.}
 \usage{
-\method{predict}{caret_stack}(
-  caret_stack,
-  new_data_list = NULL,
-  verbose = FALSE,
-  excluded_class_id = 1L,
-  aggregate_resamples = TRUE
-)
+\method{predict}{caret_stack}(object, data_list, excluded_class_id = 1L, ...)
 }
 \arguments{
-\item{caret_stack}{A \code{caret_stack} object}
+\item{object}{A \code{caret_stack} object}
 
-\item{new_data_list}{New data to predict on. Default is \code{NULL}, in which case the training data is predicted on.}
+\item{data_list}{A list of datasets to predict on, with each dataset matching the corresponding model in \code{caret_list}.}
 
-\item{verbose}{Boolean that controls the verbosity of error messages}
+\item{excluded_class_id}{An integer indicating the class index to exclude from prediction output.
+If \code{NULL}, no class is excluded. Default is 1L.}
 
-\item{excluded_class_id}{An integer indicating the class to exclude from predictions. If 0L, no class is excluded. Default is 1L.}
-
-\item{aggregate_resamples}{Boolean, controls whether to aggregate resamples by keys. Default is \code{TRUE}.}
+\item{...}{Additional arguments}
 }
 \value{
-A \code{data.table::data.table} of predictions
+A \code{data.table::data.table} of predictions for base and ensemble models.
 }
 \description{
 Create a matrix of predictions for a \code{caret_stack} object.

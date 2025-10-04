@@ -49,12 +49,14 @@
 #' @return pred with the excluded_class_id column dropped
 #' @noRd
 .drop_excluded_class <- function(pred, all_classes, excluded_class_id) {
+
+  pred <- data.table::as.data.table(pred)
   if (length(all_classes) > 1L) {
     excluded_class <- all_classes[excluded_class_id]
     classes_included <- setdiff(names(pred), excluded_class)
-    pred <- data.table::as.data.table(pred)
     pred <- pred[, ..classes_included, drop = FALSE, with = FALSE]
   }
+
   pred
 }
 

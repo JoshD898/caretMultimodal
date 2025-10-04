@@ -12,7 +12,7 @@
 \item{...}{Additional arguments}
 }
 \value{
-A \code{summary.caret_stack} object
+A \code{data.table} of methods, tuning parameters and performance metrics for the base and ensemble model
 }
 \description{
 Get a summary of a \code{caret_stack} object

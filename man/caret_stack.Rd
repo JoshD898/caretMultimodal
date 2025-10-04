@@ -6,35 +6,45 @@
 \usage{
 caret_stack(
   caret_list,
-  data_list,
-  target,
   method,
+  data_list = NULL,
+  target = NULL,
   metric = NULL,
   trControl = NULL,
-  excluded_class_id = 1L,
-  aggregate_resamples = TRUE
+  trim = TRUE,
+  ...
 )
 }
 \arguments{
 \item{caret_list}{a \code{caret_list} object}
 
-\item{data_list}{A list of datasets to predict on, with each dataset matching the corresponding model in \code{caret_list}.}
-
-\item{target}{Target parameter vector.}
-
 \item{method}{The method to train the ensemble model. Can be a custom method or one found in \code{caret::modelLookup()}.}
 
-\item{metric}{Metric for use with \code{caret::train} function. If \code{NULL}, default metric will be constructed depending on the target type.}
+\item{data_list}{A list of datasets to predict on, with each dataset matching the corresponding model in \code{caret_list}.
+If \code{NULL}, the out-of-fold predictions from the base models will be used.}
 
-\item{trControl}{Control for use with the \code{caret::train} function. A default control will be constructed depending on the target type.}
+\item{target}{Target parameter vector that must be provided if predicting on a new data list.
+If \code{NULL}, the target vector used to train the base models will be used.}
 
-\item{excluded_class_id}{An integer indicating the class to exclude from predictions. If 0L, no class is excluded. Default is 1L.}
+\item{metric}{Metric for use with \code{caret::train} function.
+If \code{NULL}, default metric will be constructed depending on the target type.}
 
-\item{aggregate_resamples}{Boolean, whether to aggregate resamples by keys. Default is \code{TRUE}.}
+\item{trControl}{Control for use with the \code{caret::train} function.
+If \code{NULL}, a default control will be constructed depending on the target type.}
+
+\item{trim}{Logical, whether the train models be trimmed to save memory. Default is \code{TRUE}}
+
+\item{...}{Additional arguments to pass to \code{caret::train}}
 }
 \value{
 A \code{caret_stack} object.
 }
 \description{
-Stack several \code{caret::train} models from a \code{caret_list} object using a \code{caret::train} model.
+Train an ensemble (stacked) model from the base learners in a
+\code{caret_list}. The ensemble is itself a \code{caret::train} model that learns to
+combine the predictions of the base models. By default, the meta-learner is
+trained on out-of-fold predictions from the resampling process, ensuring that
+the ensemble does not overfit to in-sample predictions. Alternatively, new
+datasets can be supplied via \code{data_list} and \code{target} for transfer-learning
+style ensembling.
 }
