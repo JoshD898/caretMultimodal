@@ -34,8 +34,6 @@ If \code{NULL}, a default metric will be constructed depending on the target typ
 \item{trim}{Logical, whether the train models be trimmed to save memory. Default is \code{TRUE}}
 
 \item{...}{Any additional arguments to pass to the \code{caret::train} function}
-
-\item{aggregate_resamples}{Whether to aggregate out-of-fold predictions across multiple resamples. Default is \code{TRUE}.}
 }
 \value{
 A \code{caret_list} object, which is a list of \code{caret::train} model corresponding to \code{data_list}.

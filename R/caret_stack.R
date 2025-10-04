@@ -356,10 +356,10 @@ plot_metric.caret_stack <- function(
   caret_stack <- object
 
   metrics <- compute_metric.caret_stack(caret_stack, metric_function, metric_name, descending)
-  metrics[, Model := factor(Model, levels = Model)]
+  metrics[["Model"]] <- factor(metrics[["Model"]], levels = metrics[["Model"]])
 
   ggplot2::ggplot(metrics,
-    ggplot2::aes(x = Model, y = .data[[metric_name]], fill = Model)) +
+    ggplot2::aes(x = metrics[["Model"]], y = metrics[[metric_name]], fill = metrics[["Model"]])) +
     ggplot2::geom_col() +
     ggplot2::labs(title = paste0(metric_name, " by Model"), x = NULL, y = metric_name) +
     ggplot2::theme_bw(base_size = 14) +
