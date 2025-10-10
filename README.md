@@ -11,8 +11,7 @@ coverage](https://codecov.io/gh/JoshD898/caretMultimodal/graph/badge.svg)](https
 # caretMultimodal
 
 **caretMultimodal** builds on the [caret](https://github.com/topepo/caret) package to make it 
-easy to train, combine, and interpret models from multiple datasets or modalities.  
-The package implements a data integration technique called **late fusion**, where base models are trained 
+easy to train, combine, and interpret models from multiple datasets or modalities. The package implements a data integration technique called **late fusion**, where base models are trained 
 independently on each dataset, and their predictions are then aggregated using an ensemble model.
 
 This work is inspired by Zach Mayer's [caretEnsemble](https://github.com/zachmayer/caretEnsemble) package, 
