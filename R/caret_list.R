@@ -12,6 +12,7 @@
 #' @param metric Metric for use with `caret::train` function.
 #' If `NULL`, a default metric will be constructed depending on the target type.
 #' @param trim Logical, whether the train models be trimmed to save memory. Default is `TRUE`
+#' @param do_parallel Logical, whether to parallelize model training across datasets. Default is `TRUE`
 #' @param ... Any additional arguments to pass to the `caret::train` function
 #' @return A `caret_list` object, which is a list of `caret::train` model corresponding to `data_list`.
 #' @export
@@ -23,6 +24,7 @@ caret_list <- function(
     trControl = NULL,
     metric = NULL,
     trim = TRUE,
+    do_parallel = TRUE,
     ...) {
 
   if (is.null(identifier_column_name)) {
@@ -63,10 +65,13 @@ caret_list <- function(
   train_args[["metric"]] <- metric
   train_args[["method"]] <- method
 
+  if (do_parallel) {
+    message(sprintf("Using parallel backend with %d workers.", foreach::getDoParWorkers()))
+  }
 
-  model_list <- lapply(
-    data_list,
-    function(data) {
+  operator <- if (do_parallel) foreach::`%dopar%` else foreach::`%do%`
+
+  model_list <- operator( foreach::foreach(data = data_list, .packages = "caret"), {
 
       if (is.null(identifier_column_name)) {
         train_args[["y"]] <- target
@@ -83,8 +88,7 @@ caret_list <- function(
       }
 
       model
-    }
-  )
+  })
 
   if (is.null(names(data_list))) {
     names(model_list) <- paste0("data_list[[", seq_along(data_list), "]]")
