@@ -16,10 +16,10 @@ plot_metric <- function(object, ...) {
   UseMethod("plot_metric")
 }
 
-compute_varimp <- function(object, ...) {
-  UseMethod("compute_varimp")
+compute_model_contributions <- function(object, ...) {
+  UseMethod("compute_model_contributions")
 }
 
-plot_varimp <- function(object, ...) {
-  UseMethod("plot_varimp")
+plot_model_contributions <- function(object, ...) {
+  UseMethod("plot_model_contributions")
 }

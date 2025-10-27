@@ -12,6 +12,7 @@ caret_list(
   trControl = NULL,
   metric = NULL,
   trim = TRUE,
+  do_parallel = TRUE,
   ...
 )
 }
@@ -32,6 +33,8 @@ If \code{NULL}, a default control will be constructed depending on the target ty
 If \code{NULL}, a default metric will be constructed depending on the target type.}
 
 \item{trim}{Logical, whether the train models be trimmed to save memory. Default is \code{TRUE}}
+
+\item{do_parallel}{Logical, whether to parallelize model training across datasets. Default is \code{TRUE}}
 
 \item{...}{Any additional arguments to pass to the \code{caret::train} function}
 }

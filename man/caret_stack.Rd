@@ -11,7 +11,6 @@ caret_stack(
   target = NULL,
   metric = NULL,
   trControl = NULL,
-  trim = TRUE,
   ...
 )
 }
@@ -31,8 +30,6 @@ If \code{NULL}, default metric will be constructed depending on the target type.
 
 \item{trControl}{Control for use with the \code{caret::train} function.
 If \code{NULL}, a default control will be constructed depending on the target type.}
-
-\item{trim}{Logical, whether the train models be trimmed to save memory. Default is \code{TRUE}}
 
 \item{...}{Additional arguments to pass to \code{caret::train}}
 }

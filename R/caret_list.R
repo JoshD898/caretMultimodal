@@ -65,11 +65,11 @@ caret_list <- function(
   train_args[["metric"]] <- metric
   train_args[["method"]] <- method
 
-  if (do_parallel) {
+  if (do_parallel && foreach::getDoParWorkers() > 1) {
     message(sprintf("Using parallel backend with %d workers.", foreach::getDoParWorkers()))
   }
 
-  operator <- if (do_parallel) foreach::`%dopar%` else foreach::`%do%`
+  operator <- if (do_parallel && foreach::getDoParWorkers() > 1) foreach::`%dopar%` else foreach::`%do%`
 
   model_list <- operator( foreach::foreach(data = data_list, .packages = "caret"), {
 

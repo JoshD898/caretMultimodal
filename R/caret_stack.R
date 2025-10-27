@@ -17,7 +17,6 @@
 #' If `NULL`, default metric will be constructed depending on the target type.
 #' @param trControl Control for use with the `caret::train` function.
 #' If `NULL`, a default control will be constructed depending on the target type.
-#' @param trim Logical, whether the train models be trimmed to save memory. Default is `TRUE`
 #' @param ... Additional arguments to pass to `caret::train`
 #' @return A `caret_stack` object.
 #' @export
@@ -28,7 +27,6 @@ caret_stack <- function(
     target = NULL,
     metric = NULL,
     trControl = NULL,
-    trim = TRUE,
     ...) {
 
   stopifnot(inherits(caret_list, "caret_list"))
@@ -73,10 +71,6 @@ caret_stack <- function(
                                  metric = metric,
                                  trControl = trControl,
                                  ...)
-
-  if (trim) {
-    ensemble_model <- .trim_model(ensemble_model, remove_training = FALSE)
-  }
 
   caret_stack <- list(
     caret_list = caret_list,
@@ -371,47 +365,31 @@ plot_metric.caret_stack <- function(
 }
 
 
-#' @title Compute the relative importance of each of the base models in the ensemble model
-#' @description The relative importance are calculated using the `caret::varImp` function.
-#' A scaling factor is applied to make the importance sum to 100%.
+#' @title Compute the relative contributions of each of the base models in the ensemble model
+#' @description The relative contributions are calculated using the `caret::varImp` function on the ensemble model.
+#' A scaling factor is applied to make the contributions sum to 100%.
 #' @param object A `caret_stack` object
 #' @param descending Whether to sort in descending order. If `FALSE`, the output is sorted in ascending order. Default is `TRUE`.
 #' @param ... Additional arguments
 #' @return A `ggplot2` bar chart
 #' @export
-compute_varimp.caret_stack <- function(
+compute_model_contributions.caret_stack <- function(
     object,
     descending = TRUE,
     ...
   ) {
-
-  caret_stack <- object
-
-  ensemble <- caret_stack$ensemble
-
-  importance_dt <- caret::varImp(ensemble)$importance
-  importance_dt <- importance_dt / sum(importance_dt) * 100
-  importance_dt <- data.table::as.data.table(importance_dt, keep.rownames = "Model")
-  data.table::setnames(importance_dt, "Overall", "Relative Importance")
-
-  if (descending) {
-    data.table::setorder(importance_dt, -`Relative Importance`)
-  } else {
-    data.table::setorder(importance_dt, `Relative Importance`)
-  }
-
-  importance_dt
+  scaled_varImp(caret_stack$ensemble, descending = descending)
 }
 
-#' @title Plot the relative importance of each of the base models in the ensemble model
-#' @description The relative importance are calculated using the `caret::varImp` function.
-#' A scaling factor is applied to make the importance sum to 100%.
+#' @title Plot the relative contributions of each of the base models in the ensemble model
+#' @description The relative contributions are calculated using the `caret::varImp` function on the ensemble model.
+#' A scaling factor is applied to make the contributions sum to 100%.
 #' @param object A `caret_stack` object
 #' @param descending Whether to sort in descending order. If `FALSE`, the output is sorted in ascending order. Default is `TRUE`.
 #' @param ... Additional arguments
 #' @return A `ggplot2` bar chart
 #' @export
-plot_varimp.caret_stack <- function(
+plot_model_contributions.caret_stack <- function(
     object,
     descending = TRUE,
     ...
@@ -419,17 +397,82 @@ plot_varimp.caret_stack <- function(
 
   caret_stack <- object
 
-  importance_dt <- compute_varimp.caret_stack(caret_stack, descending)
+  importance_dt <- compute_model_contributions.caret_stack(caret_stack, descending)
   importance_dt[, Model := factor(Model, levels = Model)]
 
   ggplot2::ggplot(importance_dt,
-    ggplot2::aes(x = Model, y = .data[["Relative Importance"]], fill = Model)) +
+    ggplot2::aes(x = Model, y = .data[["Relative Contribution"]], fill = Model)) +
     ggplot2::geom_col() +
-    ggplot2::labs(title = "Relative Importance of Base Models", x = NULL, y = "Relative Importance (%)") +
+    ggplot2::labs(title = "Relative Importance of Base Models", x = NULL, y = "Relative Contribution (%)") +
     ggplot2::theme_bw(base_size = 14) +
     ggplot2::theme(
       plot.title   = ggplot2::element_text(hjust = 0.5),
       legend.position = "none",
       axis.text.x  = ggplot2::element_text(angle = 45, vjust = 1, hjust = 1, size = 14)
     )
+}
+
+
+#' @description The method, tuneGrid, and trControl is identical to that of the original caret_stack.
+#' @param metric_function A function that takes two arguments `(predictions, target)`
+#' and returns a single numeric value representing the metric to compute (e.g., RMSE, accuracy, AUC).
+compute_ablation.caret_stack <- function(
+    object,
+    metric_function,
+    reverse = FALSE,
+    ...) {
+  caret_stack <- object
+  ensemble <- caret_stack$ensemble
+
+  method <- ensemble$method
+  tuneGrid <- ensemble$results[, names(ensemble$bestTune), drop = FALSE]
+  metric <- ensemble$metric
+  trControl <- ensemble$control
+
+  target <- ensemble$trainingData$.outcome
+  training_data <- subset(oof_predictions.caret_stack(caret_stack), select = -ensemble)
+
+  results <- data.table::data.table(Row = c(names(training_data), "metric"))
+
+
+  while (ncol(training_data) > 1) {
+    ensemble_model <- caret::train(x = training_data,
+                                   y = target,
+                                   method = method,
+                                   metric = metric,
+                                   trControl = trControl,
+                                   tuneGrid = tuneGrid)
+
+    imp <- scaled_varImp(ensemble_model)
+    remove_model <- if (reverse) imp[which.max(`Relative Contribution`), Model] else imp[which.min(`Relative Contribution`), Model]
+    training_data[[remove_model]] <- NULL
+
+    oof_pred <- .get_oof_preds(ensemble_model, aggregate_resamples = TRUE)
+    oof_pred <- .drop_excluded_class(oof_pred, all_classes = ensemble_model$levels, excluded_class_id = 1L)
+    oof_pred <- as.numeric(oof_pred[[1]])
+
+
+    metric_val <- metric_function(oof_pred, target)
+
+    new_col <- c(imp[match(results$Row, imp$Model), `Relative Contribution`])
+    new_col[length(new_col)] <- metric_val
+    results[[paste0("Ablation_", ncol(results))]] <- new_col
+  }
+
+  results
+}
+
+
+plot_ablation.caret_stack <- function(
+    object,
+    metric_function,
+    metric_name,
+    reverse = FALSE,
+    ...) {
+
+  data <- t(compute_ablation.caret_stack(object, metric_function, reverse))
+
+  print(data)
+
+
 }
