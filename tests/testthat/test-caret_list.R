@@ -108,22 +108,22 @@ test_that("Invalid inputs", {
 
 test_that("Parallelization", {
 
-  n_cores <- parallel::detectCores() - 1
+  n_cores <- min(parallel::detectCores() - 1, 2)
+  skip_if(n_cores < 2)
 
-  if (n_cores > 1) {
-    cluster <- parallel::makeCluster(n_cores)
-    doParallel::registerDoParallel(cluster)
+  cluster <- parallel::makeCluster(n_cores)
+  doParallel::registerDoParallel(cluster)
 
-    on.exit({
-      parallel::stopCluster(cluster)
-      foreach::registerDoSEQ()
-    }, add = TRUE)
+  on.exit({
+    parallel::stopCluster(cluster)
+    foreach::registerDoSEQ()
+  }, add = TRUE)
 
-    expect_message(
-      caret_list(target = binary_vector, data_list = list(df1, df2, df3), method = "glmnet"),
-      sprintf("Using parallel backend with %d workers.", n_cores)
-    )
-  }
+  expect_message(
+    caret_list(target = binary_vector, data_list = list(df1, df2, df3), method = "glmnet"),
+    sprintf("Using parallel backend with %d workers.", n_cores)
+  )
+
 })
 
 

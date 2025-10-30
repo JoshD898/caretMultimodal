@@ -416,6 +416,7 @@ plot_model_contributions.caret_stack <- function(
 #' @description The method, tuneGrid, and trControl is identical to that of the original caret_stack.
 #' @param metric_function A function that takes two arguments `(predictions, target)`
 #' and returns a single numeric value representing the metric to compute (e.g., RMSE, accuracy, AUC).
+#' @export
 compute_ablation.caret_stack <- function(
     object,
     metric_function,
@@ -462,7 +463,7 @@ compute_ablation.caret_stack <- function(
   results
 }
 
-
+#' @export
 plot_ablation.caret_stack <- function(
     object,
     metric_function,
