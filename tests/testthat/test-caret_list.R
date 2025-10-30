@@ -8,29 +8,20 @@ numeric_vector <- runif(30)
 binary_vector <- factor(sample(c("Type1", "Type2"), 30, replace = TRUE))
 multiclass_vector <- factor(sample(c("Type1", "Type2", "Type3"), 30, replace = TRUE))
 
-numeric_table <- data.table::data.table(
-  Var1 = runif(30),
-  Var2 = rnorm(30),
-  Var3 = runif(30, 10, 50),
-  Var4 = rpois(30, lambda = 5),
-  Var5 = rnorm(30, mean = 100, sd = 15)
-)
+make_df <- function(n = 30) {
+  data.table::data.table(
+    Var1 = runif(n),
+    Var2 = rnorm(n),
+    Var3 = runif(n, 10, 50),
+    Var4 = rpois(n, lambda = 5),
+    Var5 = rnorm(n, mean = 100, sd = 15)
+  )
+}
 
-factor_table <- data.table::data.table(
-  Var1 = factor(sample(c("A", "B", "C"), 30, replace = TRUE)),
-  Var2 = factor(sample(c("X", "Y", "Z"), 30, replace = TRUE)),
-  Var3 = factor(sample(c("Red", "Blue", "Green"), 30, replace = TRUE)),
-  Var4 = factor(sample(c("Small", "Medium", "Large"), 30, replace = TRUE)),
-  Var5 = factor(sample(c("Yes", "No"), 30, replace = TRUE))
-)
+df1 <- make_df()
+df2 <- make_df()
+df3 <- make_df()
 
-mixed_table <- data.table::data.table(
-  Num1 = runif(30),
-  Num2 = rnorm(30),
-  Num3 = rpois(30, lambda = 5),
-  Factor1 = factor(sample(c("Apple", "Banana", "Cherry"), 30, replace = TRUE)),
-  Factor2 = factor(sample(c("Hot", "Cold"), 30, replace = TRUE))
-)
 
 # Core Tests -----------------------------------------------------------------------
 
@@ -69,20 +60,21 @@ caret_list_generic_test <- function(target, data_list, method) {
   })
 }
 
+# Realistically this should loop through all the available models that caret has... for now just testing random forest and glmnet
 
 caret_list_generic_test(
   target = numeric_vector,
-  data_list = list(numeric = numeric_table, mixed = mixed_table),
+  data_list = list(df1, df2, df3),
   method = "glmnet")
 
 caret_list_generic_test(
   target = binary_vector,
-  data_list = list(numeric = numeric_table, mixed = mixed_table),
+  data_list = list(df1, df2, df3),
   method = "glmnet")
 
 caret_list_generic_test(
   target = binary_vector,
-  data_list = list(numeric = numeric_table, factor = factor_table, mixed = mixed_table),
+  data_list = list(df1, df2, df3),
   method = "rf")
 
 
@@ -93,16 +85,16 @@ test_that("Invalid inputs", {
   indexed_target <- data.frame(value = numeric_vector)
   indexed_target$index <- seq_len(nrow(indexed_target))
 
-  indexed_numeric_table <- numeric_table
+  indexed_numeric_table <- df1
   indexed_numeric_table$index <- seq_len(nrow(indexed_numeric_table))
 
-  expect_error(caret_list(target = numeric_vector, data_list = list(head(numeric_table, 29)), method = "glm"),
+  expect_error(caret_list(target = numeric_vector, data_list = list(head(df1, 29)), method = "glm"),
                "The number of rows of data_list\\[\\[1\\]\\] does not match the length of the target vector.")
 
-  expect_error(caret_list(target = indexed_target, data_list = list(numeric_table), method = "glm"),
+  expect_error(caret_list(target = indexed_target, data_list = list(df1), method = "glm"),
                "Target must be a vector when no identifier column name is provided.")
 
-  expect_error(caret_list(target = indexed_target, data_list = list(numeric_table), method = "glm", identifier_column_name = "index"),
+  expect_error(caret_list(target = indexed_target, data_list = list(df1), method = "glm", identifier_column_name = "index"),
                "The identifier column 'index' is missing in data_list\\[\\[1\\]\\].")
 
   expect_error(caret_list(target = numeric_vector, data_list = list(indexed_numeric_table), method = "glm", identifier_column_name = "index"),
@@ -112,6 +104,26 @@ test_that("Invalid inputs", {
 
   expect_error(caret_list(target = indexed_target, data_list = list(indexed_numeric_table), method = "glm", identifier_column_name = "index"),
                "Target must have exactly two columns: one serving as an identifier and the other containing values for training.")
+})
+
+test_that("Parallelization", {
+
+  n_cores <- parallel::detectCores() - 1
+
+  if (n_cores > 1) {
+    cluster <- parallel::makeCluster(n_cores)
+    doParallel::registerDoParallel(cluster)
+
+    on.exit({
+      parallel::stopCluster(cluster)
+      foreach::registerDoSEQ()
+    }, add = TRUE)
+
+    expect_message(
+      caret_list(target = binary_vector, data_list = list(df1, df2, df3), method = "glmnet"),
+      sprintf("Using parallel backend with %d workers.", n_cores)
+    )
+  }
 })
 
 

@@ -23,3 +23,11 @@ compute_model_contributions <- function(object, ...) {
 plot_model_contributions <- function(object, ...) {
   UseMethod("plot_model_contributions")
 }
+
+compute_ablation <- function(object, ...) {
+  UseMethod("compute_ablation")
+}
+
+plot_ablation <- function(object, ...) {
+  UseMethod("plot_ablation")
+}

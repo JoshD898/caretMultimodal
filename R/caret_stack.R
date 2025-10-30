@@ -191,7 +191,7 @@ oof_predictions.caret_stack <- function(
 
   combined_preds <- cbind(training_data, pred)
 
-  combined_preds
+  as.data.table(combined_preds)
 }
 
 #' @title Get a summary of a `caret_stack` object
@@ -378,7 +378,7 @@ compute_model_contributions.caret_stack <- function(
     descending = TRUE,
     ...
   ) {
-  scaled_varImp(caret_stack$ensemble, descending = descending)
+  scaled_varImp(object$ensemble, descending = descending)
 }
 
 #' @title Plot the relative contributions of each of the base models in the ensemble model
@@ -470,9 +470,19 @@ plot_ablation.caret_stack <- function(
     reverse = FALSE,
     ...) {
 
-  data <- t(compute_ablation.caret_stack(object, metric_function, reverse))
+  data <- compute_ablation.caret_stack(object, metric_function, reverse)
+  long <- data.table::melt(data, id.vars = "Row", variable.name = "Ablation")
+  metrics <- long[Row == "metric"]
+  parts <- long[Row != "metric"]
 
-  print(data)
+  plot_data <- merge(parts, metrics[, .(Ablation, Metric = value)], by = "Ablation")
+  plot_data[, Height := value * Metric]
+  plot_data[is.na(Height), Height := 0]
 
+  setnames(plot_data, "Row", "Model")
 
+  ggplot2::ggplot(plot_data,
+    ggplot2::aes(x = Ablation, y = Height, fill = Model)) +
+    ggplot2::geom_bar(stat = "identity") +
+    ggplot2::theme_bw(base_size = 14)
 }
