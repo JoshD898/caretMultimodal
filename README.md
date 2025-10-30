@@ -116,7 +116,7 @@ trControl to implement leave-one-sample-out cross-validation.
 
 ``` r
 set.seed(123L)
-caretMultimodal::load_pregnancy()
+caretMultimodal::load_gestational_age()
 
 # Remove postpartum samples
 
@@ -127,8 +127,8 @@ featureweeks <- featureweeks[-postpartum_indices]
 
 # Set up hyperparameter tuning
 
-alphas <- c(0.7, 0.775, 0.850, 0.925, 1)
-lambdas <- seq(0.001, 0.1, by = 0.01)
+alphas <- seq(0, 1, 0.1)
+lambdas <- seq(0, 12, by = 0.5)
 tuneGrid <- expand.grid(alpha = alphas, lambda = lambdas)
 
 # Set up trControl for leave-one-sample-out cross-validation
