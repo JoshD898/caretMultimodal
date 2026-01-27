@@ -35,8 +35,8 @@ heart_models <- caretMultimodal::caret_list(
 
 # Train the ensemble model
 
-# heart_stack <- caretMultimodal::caret_stack(
-#   caret_list = heart_models,
-#   method = "glmnet",
-#   tuneGrid = tuneGrid
-# )
+heart_stack <- caretMultimodal::caret_stack(
+  caret_list = heart_models,
+  method = "glmnet",
+  tuneGrid = tuneGrid
+)

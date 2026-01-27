@@ -378,7 +378,7 @@ plot_metric.caret_stack <- function(
 #' @param object A `caret_stack` object
 #' @param descending Whether to sort in descending order. If `FALSE`, the output is sorted in ascending order. Default is `TRUE`.
 #' @param ... Additional arguments
-#' @return A `ggplot2` bar chart
+#' @return A `data.table`
 #' @export
 compute_model_contributions.caret_stack <- function(
     object,
@@ -488,7 +488,7 @@ compute_ablation.caret_stack <- function(
 }
 
 #' @title Plot the results of an ablation analysis for a caret_stack model.
-#' @description Contructs a bar plot with the output of the compute_ablation method.
+#' @description Contructs a bar plot with the output of the `compute_ablation` method.
 #' @param metric_function A function that takes two arguments `(predictions, target)`
 #' and returns a single numeric value representing the metric to compute (e.g., RMSE, accuracy, AUC).
 #' @param metric_name The name of the metric
@@ -523,8 +523,19 @@ plot_ablation.caret_stack <- function(
 
 
 
-#' TODO Document
-#' TODO Check VarImp truncation
+#' @title Compute the feature level contributions for a caret_stack model.
+#' @description Feature-level contributions for the ensemble model are
+#' computed using a two-stage application of caret::varImp. First,
+#' varImp is applied to the ensemble model, where the base-model predictions
+#' are treated as features, yielding dataset-level weights. Next, varImp is
+#' applied to each base model to obtain feature-level importance scores within
+#' each dataset. The final contribution of an individual feature to the ensemble
+#' is calculated as the product of its dataset-level weight and its feature-level
+#' importance within the corresponding base model.
+#' @param object A `caret_stack` object.
+#' @param n_features The maximum number of features to include. Setting to a very
+#' large value will include all features. Default is 20.
+#' @return A `data.table`
 #' @export
 compute_feature_contributions.caret_stack <- function(
     object,
@@ -539,7 +550,6 @@ compute_feature_contributions.caret_stack <- function(
 
   for (model in names(base_models)) {
     imp_dt <- scaled_varImp(base_models[[model]])
-    imp_dt <- imp_dt[get('Relative Contribution') > 0]
 
     setnames(imp_dt, "Model", "Feature")
     imp_dt[, Model := model]
@@ -558,7 +568,12 @@ compute_feature_contributions.caret_stack <- function(
   results[1:min_features]
 }
 
-#' TODO Document
+#' @title Plot the feature level contributions to a stacked model
+#' @description Constructs a bar plot with the output of the `compute_feature_contributions` method.
+#' @param object A `caret_stack` object.
+#' @param n_features The maximum number of features to include. Setting to a very
+#' large value will include all features. Default is 20.
+#' @return A `ggplot2` bar plot
 #' @export
 plot_feature_contributions.caret_stack <- function(
     object,
@@ -567,7 +582,6 @@ plot_feature_contributions.caret_stack <- function(
   plot_data <- compute_feature_contributions(object, n_features = n_features)
 
   plot_data[, Feature_id := paste0(Feature, "_", Model)]
-
 
   ggplot2::ggplot(plot_data,
     ggplot2::aes(x = reorder(Feature_id, -`Relative Contribution`), y = `Relative Contribution`, fill = Model)) +
