@@ -6,7 +6,12 @@
 #' @param data_list A list of data sets to train models on
 #' @param method The method to train the models with. Can be a custom method or one found in `caret::modelLookup()`.
 #' @param identifier_column_name The name of a column that connects the rows in the dataset (ex. a participant ID).
-#' If provided, this column must be present in all datasets within the `data_list` for proper matching. Use this if the datasets have different numbers of rows.
+#' If provided, this column must be present in all datasets within the `data_list` for proper matching.
+#' Use this if the datasets have different numbers of rows.
+#'
+#' Currently, providing `identifier_column_name` disables support for custom `trControl`, because a new
+#' resampling scheme must be constructed for each dataset after row matching, which may invalidate
+#' user-supplied fold indices.
 #' @param trControl Control for use with the `caret::train` function.
 #' If `NULL`, a default control will be constructed depending on the target type.
 #' @param metric Metric for use with `caret::train` function.
@@ -57,7 +62,7 @@ caret_list <- function(
   .check_method(method)
 
   raw_target <- if (is.null(identifier_column_name)) target else .match_identifiers(target, data_list[[1]], identifier_column_name)
-  trControl <- if (is.null(trControl)) .default_control(raw_target) else trControl
+  trControl <- if (is.null(trControl) | !is.null(identifier_column_name)) .default_control(raw_target) else trControl
   metric <- if (is.null(metric)) .default_metric(raw_target) else metric
 
   train_args <- list(...)
@@ -75,16 +80,24 @@ caret_list <- function(
 
       if (is.null(identifier_column_name)) {
         train_args[["y"]] <- target
+        train_args[["x"]] <- data
+        train_args[["trControl"]] <- if (is.null(trControl)) .default_control(target) else trControl
       } else {
         train_args[["y"]] <- .match_identifiers(target, data, identifier_column_name)
+        train_args[["x"]] <- data[, setdiff(colnames(data), identifier_column_name), drop = FALSE]
+        train_args[["trControl"]] <- .default_control(train_args[["y"]]) # Only allow for the default control for now
       }
-
-      train_args[["x"]] <- data
 
       model <- do.call(caret::train, train_args)
 
       if(trim) {
         model <- .trim_model(model)
+      }
+
+      # Need to add this as metadata to align the out-of-fold predictions later
+      # Access with attr(obj, "identifier_column")
+      if(!is.null(identifier_column_name)) {
+        attr(model, "identifier_column") <- data[[identifier_column_name]]
       }
 
       model
@@ -97,6 +110,14 @@ caret_list <- function(
   }
 
   class(model_list) <- c("caret_list", "list")
+
+  # Add on the target and identifier column for easy access later
+  if (!is.null(identifier_column_name)) {
+    attr(model_list, "target") <- target[[setdiff(colnames(target), identifier_column_name)]]
+    attr(model_list, "identifier_column") <- target[[identifier_column_name]]
+  } else {
+    attr(model_list, "target") <- target
+  }
 
   model_list
 }
@@ -168,10 +189,13 @@ predict.caret_list <- function(
 #'   hyperparameter setting of a trained caret model. These predictions come from
 #'   the resampling process (not the final refit) and can optionally be aggregated
 #'   across resamples to produce a single prediction per training instance.
+#'   TODO touch up description
 #' @param object A `caret_list` object
 #' @param excluded_class_id An integer indicating the class index to exclude from prediction output.
 #' If `NONE`, no class is excluded. Default is 1L.
 #' @param aggregate_resamples Logical, whether to aggregate resamples across folds.
+#' @param intersection_only Logical, whether to trim down the out of fold predictions to only the intersection of
+#' samples that have data in all datasets.
 #' @param ... Additional arguments
 #' @return A `data.table::data.table` of OOF predictions
 #' @export
@@ -179,6 +203,7 @@ oof_predictions.caret_list <- function(
     object,
     excluded_class_id = 1L,
     aggregate_resamples = TRUE,
+    intersection_only = TRUE,
     ...) {
 
   caret_list <- object
@@ -209,8 +234,23 @@ oof_predictions.caret_list <- function(
     pred
   })
 
+
+  ids_list <- lapply(caret_list, function(model) attr(model, "identifier_column"))
+
+  if (!is.null(ids_list[[1]])) {
+
+      keep_ids <- if (intersection_only) Reduce(intersect, ids_list) else Reduce(union, ids_list)
+
+      prediction_list <- lapply(seq_along(prediction_list), function(i) {
+        pred <- prediction_list[[i]]
+        model_ids <- ids_list[[i]]
+        pred[match(keep_ids, model_ids), , drop = FALSE]
+      })
+  }
+
   names(prediction_list) <- names(caret_list)
-  data.table::as.data.table(prediction_list)
+
+  prediction_list <- data.table::as.data.table(prediction_list)
 }
 
 
@@ -248,8 +288,6 @@ summary.caret_list <- function (object, ...) {
 
 # Helper functions -----------------------------------------------------------------------------------------
 
-
-
 #' @title Matches the identifiers of a target column with the rows of a data set
 #' @param target The target data table (two columns: one for the variable to train on one for identifier)
 #' @param data A data set to use for model training that contains an identifier column.
@@ -270,4 +308,23 @@ summary.caret_list <- function (object, ...) {
   target
 }
 
+#' @title Align target vector to dataset intersections
+#' This is for use when datasets with different numbers of rows are passed into `caret_list` with an
+#' identifier column. It finds the target intersection in the same way `oof_predictions` does, for use in
+#' training the stacked model
+#' @param caret_list A  `caret_list` object
+#' @return A vector
+#' @noRd
+.align_target <- function(
+    caret_list
+) {
+  ids_list <- lapply(caret_list, function(model) attr(model, "identifier_column"))
 
+  # Align the target vector and save it as an attribute to the caret_list
+  target <- attr(caret_list, "target")
+  target_ids <- attr(caret_list, "identifier_column")
+
+  keep_ids <- Reduce(intersect, ids_list) # Always want the intersection
+
+  target[match(keep_ids, target_ids)]
+}

@@ -31,3 +31,12 @@ compute_ablation <- function(object, ...) {
 plot_ablation <- function(object, ...) {
   UseMethod("plot_ablation")
 }
+
+compute_feature_contributions <- function(object, ...) {
+  UseMethod("compute_feature_contributions")
+}
+
+plot_feature_contributions <- function(object, ...) {
+  UseMethod("plot_feature_contributions")
+}
+

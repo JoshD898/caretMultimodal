@@ -135,7 +135,7 @@ tuneGrid <- expand.grid(alpha = alphas, lambda = lambdas)
 
 loso_folds <- caret::groupKFold(featurepatients, k = length(unique(featurepatients)))
 
-trControl <- trainControl(
+trControl <- caret::trainControl(
   method = "cv",
   index = loso_folds,
   savePredictions = "final",

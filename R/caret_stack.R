@@ -17,6 +17,7 @@
 #' If `NULL`, default metric will be constructed depending on the target type.
 #' @param trControl Control for use with the `caret::train` function.
 #' If `NULL`, a default control will be constructed depending on the target type.
+#' TODO hyperlink default arguments + add quick description
 #' @param ... Additional arguments to pass to `caret::train`
 #' @return A `caret_stack` object.
 #' @export
@@ -48,15 +49,21 @@ caret_stack <- function(
       }
     }
 
+    warning(
+      "New data is being used to train the stacked model. To prevent information leakage, ensure that the base models were not trained on this data. ",
+      call. = FALSE
+    )
+
     predictions <- predict.caret_list(caret_list, data_list)
   } else {
-    predictions <- oof_predictions.caret_list(caret_list)
 
-    obs <- data.table::data.table(caret_list[[1L]]$pred)
-    data.table::setorderv(obs, "rowIndex")
-    obs <- obs[, list(obs = obs[1L]), by = "rowIndex"]
-    target <- obs[["obs"]]
+    predictions <- oof_predictions.caret_list(caret_list, intersection_only = TRUE)
 
+    if (is.null(attr(caret_list[[1]], "identifier_column"))) {
+      target <- attr(caret_list, "target")
+    } else {
+      target <- .align_target(caret_list)
+    }
   }
 
   .check_method(method)
@@ -146,7 +153,7 @@ predict.caret_stack <- function(
 #' @param object A `caret_stack` object
 #' @param excluded_class_id An integer indicating the class index to exclude from ensemble prediction output.
 #' If `NONE`, no class is excluded. Default is 1L.
-#' @param aggregate_resamples Logical, whether to aggregate resamples across folds.
+#' @param aggregate_resamples Logical, whether to aggregate resamples across folds. Default is `TRUE`.
 #' @param ... Additional arguments
 #' @return A `data.table::data.table` of OOF predictions
 #' @export
@@ -412,14 +419,31 @@ plot_model_contributions.caret_stack <- function(
     )
 }
 
-
-#' @description The method, tuneGrid, and trControl is identical to that of the original caret_stack.
+#' @title Perform an ablation analysis for a caret_stack model.
+#' @description
+#' This function performs a systematic ablation analysis on a `caret_stack` ensemble to evaluate
+#' each base learner's contribution to predictive performance. The procedure begins with the full
+#' set of base model predictions and iteratively removes one model at a time. At each iteration, the ensemble
+#' model is retrained on the remaining learners using the same `method`, `tuneGrid`, and
+#' `trControl` settings as the original stack. Model importance in the ensemble is estimated, and
+#' the learner with the lowest (or highest, if `reverse = TRUE`) relative contribution is removed.
+#'
+#' After each ablation step, out-of-fold predictions are generated and evaluated using the
+#' user-supplied `metric_function`, which should accept two arguments `(predictions, target)` and
+#' return a single numeric value (e.g., RMSE, accuracy, AUC). The resulting performance metrics and
+#' model contribution estimates are recorded at each stage and returned as a `data.table`.
+#'
 #' @param metric_function A function that takes two arguments `(predictions, target)`
 #' and returns a single numeric value representing the metric to compute (e.g., RMSE, accuracy, AUC).
+#' @param metric_name The name of the metric
+#' @param reverse The direction to ablate in. If `FALSE`, the lowest contributing model is removed at each iteration.
+#' If `TRUE`, the highest contributing model is removed. Default is `FALSE`.
+#' @return A `data.table`
 #' @export
 compute_ablation.caret_stack <- function(
     object,
     metric_function,
+    metric_name,
     reverse = FALSE,
     ...) {
   caret_stack <- object
@@ -433,7 +457,7 @@ compute_ablation.caret_stack <- function(
   target <- ensemble$trainingData$.outcome
   training_data <- subset(oof_predictions.caret_stack(caret_stack), select = -ensemble)
 
-  results <- data.table::data.table(Row = c(names(training_data), "metric"))
+  results <- data.table::data.table(Row = c(names(training_data), metric_name))
 
 
   while (ncol(training_data) > 1) {
@@ -463,6 +487,14 @@ compute_ablation.caret_stack <- function(
   results
 }
 
+#' @title Plot the results of an ablation analysis for a caret_stack model.
+#' @description Contructs a bar plot with the output of the compute_ablation method.
+#' @param metric_function A function that takes two arguments `(predictions, target)`
+#' and returns a single numeric value representing the metric to compute (e.g., RMSE, accuracy, AUC).
+#' @param metric_name The name of the metric
+#' @param reverse The direction to ablate in. If `FALSE`, the lowest contributing model is removed at each iteration.
+#' If `TRUE`, the highest contributing model is removed. Default is `FALSE`.
+#' @return A `data.table`
 #' @export
 plot_ablation.caret_stack <- function(
     object,
@@ -471,13 +503,13 @@ plot_ablation.caret_stack <- function(
     reverse = FALSE,
     ...) {
 
-  data <- compute_ablation.caret_stack(object, metric_function, reverse)
+  data <- compute_ablation.caret_stack(object, metric_function, metric_name, reverse)
   long <- data.table::melt(data, id.vars = "Row", variable.name = "Ablation")
-  metrics <- long[Row == "metric"]
-  parts <- long[Row != "metric"]
+  metrics <- long[Row == metric_name]
+  parts <- long[Row != metric_name]
 
   plot_data <- merge(parts, metrics[, .(Ablation, Metric = value)], by = "Ablation")
-  plot_data[, Height := value * Metric]
+  plot_data[, Height := value * Metric / 100]
   plot_data[is.na(Height), Height := 0]
 
   setnames(plot_data, "Row", "Model")
@@ -485,5 +517,63 @@ plot_ablation.caret_stack <- function(
   ggplot2::ggplot(plot_data,
     ggplot2::aes(x = Ablation, y = Height, fill = Model)) +
     ggplot2::geom_bar(stat = "identity") +
+    ggplot2::labs(title = "Ablation Analysis", x = "Iteration", y = metric_name) +
     ggplot2::theme_bw(base_size = 14)
+}
+
+
+
+#' TODO Document
+#' TODO Check VarImp truncation
+#' @export
+compute_feature_contributions.caret_stack <- function(
+    object,
+    n_features = 20
+) {
+
+  model_weights <- compute_model_contributions(object)
+
+  base_models <- object$caret_list
+
+  results <- list()
+
+  for (model in names(base_models)) {
+    imp_dt <- scaled_varImp(base_models[[model]])
+    imp_dt <- imp_dt[get('Relative Contribution') > 0]
+
+    setnames(imp_dt, "Model", "Feature")
+    imp_dt[, Model := model]
+    setcolorder(imp_dt, c("Model", "Feature", "Relative Contribution"))
+
+    model_weight <- model_weights[Model == model, 'Relative Contribution'][[1]]
+    imp_dt[, `Relative Contribution` := `Relative Contribution` * model_weight / 100]
+
+    results[[model]] <- imp_dt
+  }
+
+  results <- rbindlist(results, fill = TRUE)
+  results <- results[order(-`Relative Contribution`)]
+
+  min_features <- min(n_features, nrow(results))
+  results[1:min_features]
+}
+
+#' TODO Document
+#' @export
+plot_feature_contributions.caret_stack <- function(
+    object,
+    n_features = 20
+) {
+  plot_data <- compute_feature_contributions(object, n_features = n_features)
+
+  plot_data[, Feature_id := paste0(Feature, "_", Model)]
+
+
+  ggplot2::ggplot(plot_data,
+    ggplot2::aes(x = reorder(Feature_id, -`Relative Contribution`), y = `Relative Contribution`, fill = Model)) +
+    ggplot2::geom_bar(stat = "identity") +
+    ggplot2::scale_x_discrete(labels = plot_data$Feature) +
+    ggplot2::labs(title = "Feature Contributions to Ensemble Model", x = "Feature", y = "Relative Contribution (%)") +
+    ggplot2::theme_bw(base_size = 14) +
+    ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 90, hjust = 1))
 }

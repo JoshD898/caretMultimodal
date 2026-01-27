@@ -88,7 +88,7 @@ caret_stack_generic_test <- function(target, data_list, method) {
     expect_equal(nrow(ablation), length(data_list) + 1)
     expect_equal(ncol(ablation), length(data_list)) # one column for model names, then n - 1 columns for ablation runs
 
-    expect_s3_class(suppressWarnings(plot_ablation(stack, metric_function = metric_fun)), "ggplot")
+    expect_s3_class(suppressWarnings(plot_ablation(stack, metric_function = metric_fun, metric_name = "metric", reverse = TRUE)), "ggplot")
   })
 
   test_that("plot_roc.caret_stack", {
