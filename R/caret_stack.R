@@ -84,6 +84,16 @@ caret_stack <- function(
     ensemble = ensemble_model
   )
 
+  model_names <- names(caret_list)
+
+  # This sets the color palette or all the visualizations
+  model_colors <- setNames(
+    viridis::viridis(length(model_names) + 1),
+    c(model_names, "ensemble")
+  )
+
+  attr(caret_stack, "model_colors") <- model_colors
+
   class(caret_stack) <- "caret_stack"
 
   caret_stack
@@ -268,20 +278,32 @@ plot_roc.caret_stack <- function(
   }))
 
   aucs <- sort(sapply(rocs, pROC::auc), decreasing = TRUE)
-  auc_labels <- paste0(names(aucs), " (AUC = ", round(aucs, 3), ")")
+
+  roc_data[, AUC := round(aucs, 3)[as.character(Model)]]
 
   roc_data$Model <- factor(
     roc_data$Model,
     levels = names(aucs),
-    labels = if (include_auc) auc_labels else names(aucs)
+    labels = names(aucs)
   )
+
+  legend_labels <- if (include_auc) paste0(names(aucs), " (AUC = ", round(aucs, 3), ")") else names(aucs)
 
   ggplot2::ggplot(roc_data,
     ggplot2::aes(x = .data$FPR, y = .data$TPR, color = .data$Model, linetype = .data$Model)) +
-    ggplot2::geom_line(size = 1.2) +
+    ggplot2::geom_line(linewidth = 1.2) +
     ggplot2::geom_abline(slope = 1, intercept = 0, linetype = "dotted") +
     ggplot2::labs(title = "ROC Curves", x = "False Positive Rate (FPR)", y = "True Positive Rate (TPR)") +
-    ggplot2::theme_bw(base_size = 14)
+    ggplot2::theme_bw() +
+    ggplot2::theme(
+      legend.position = c(0.95, 0.05),
+      legend.justification = c(0.95, 0.05),
+      legend.background = ggplot2::element_rect(fill = "white", color = "black"),
+      plot.title = ggplot2::element_text(hjust = 0.5)
+    ) +
+    ggplot2::scale_color_manual(values = attr(caret_stack, "model_colors"), labels = legend_labels) +
+    ggplot2::scale_linetype_manual(values = 1:length(unique(roc_data$Model)),
+                                   labels = legend_labels)
 }
 
 
@@ -363,12 +385,13 @@ plot_metric.caret_stack <- function(
     ggplot2::aes(x = metrics[["Model"]], y = metrics[[metric_name]], fill = metrics[["Model"]])) +
     ggplot2::geom_col() +
     ggplot2::labs(title = paste0(metric_name, " by Model"), x = NULL, y = metric_name) +
-    ggplot2::theme_bw(base_size = 14) +
+    ggplot2::theme_bw() +
     ggplot2::theme(
       plot.title   = ggplot2::element_text(hjust = 0.5),
       legend.position = "none",
       axis.text.x  = ggplot2::element_text(angle = 45, vjust = 1, hjust = 1, size = 14)
-    )
+    ) +
+    ggplot2::scale_fill_manual(values = attr(caret_stack, "model_colors"))
 }
 
 
@@ -416,7 +439,8 @@ plot_model_contributions.caret_stack <- function(
       plot.title   = ggplot2::element_text(hjust = 0.5),
       legend.position = "none",
       axis.text.x  = ggplot2::element_text(angle = 45, vjust = 1, hjust = 1, size = 14)
-    )
+    ) +
+    ggplot2::scale_fill_manual(values = attr(caret_stack, "model_colors"))
 }
 
 #' @title Perform an ablation analysis for a caret_stack model.
@@ -518,7 +542,9 @@ plot_ablation.caret_stack <- function(
     ggplot2::aes(x = Ablation, y = Height, fill = Model)) +
     ggplot2::geom_bar(stat = "identity") +
     ggplot2::labs(title = "Ablation Analysis", x = "Iteration", y = metric_name) +
-    ggplot2::theme_bw(base_size = 14)
+    ggplot2::theme_bw(base_size = 14) +
+    ggplot2::theme(plot.title   = ggplot2::element_text(hjust = 0.5)) +
+    ggplot2::scale_fill_manual(values = attr(object, "model_colors"))
 }
 
 
@@ -589,5 +615,12 @@ plot_feature_contributions.caret_stack <- function(
     ggplot2::scale_x_discrete(labels = plot_data$Feature) +
     ggplot2::labs(title = "Feature Contributions to Ensemble Model", x = "Feature", y = "Relative Contribution (%)") +
     ggplot2::theme_bw(base_size = 14) +
-    ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 90, hjust = 1))
+    ggplot2::theme(
+      legend.position = c(0.95, 0.95),
+      legend.justification = c(0.95, 0.95),
+      legend.background = ggplot2::element_rect(fill = "white", color = "black"),
+      plot.title = ggplot2::element_text(hjust = 0.5),
+      axis.text.x = ggplot2::element_text(angle = 90, hjust = 0.5, vjust = 0.5)
+    ) +
+    ggplot2::scale_fill_manual(values = attr(object, "model_colors"))
 }
